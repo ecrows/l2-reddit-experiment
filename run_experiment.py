@@ -24,14 +24,14 @@ import bert
 from bert import run_classifier
 from bert import optimization
 from bert import tokenization
-from google.colab import auth
+#from google.colab import auth
 
 import bertmodel
 import sys
 
-if len(sys.argv < 2):
+if len(sys.argv) < 2:
   print("This script requires an argument for masked or unmasked mode.")
-  return
+  exit()
 
 if sys.argv[1] == 'masked':
   MASK_MODE = 'masked'
@@ -39,11 +39,12 @@ elif sys.argv[1] == 'unmasked':
   MASK_MODE = 'unmasked'
 else:
   print("Invalid mask mode.")
-  return
+  exit()
 
-auth.authenticate_user()
+#auth.authenticate_user()
 
-OUTPUT_DIR = f'validation-models/{datetime.now().timestamp()}'
+timestamp = datetime.now().timestamp()
+OUTPUT_DIR = 'validation-models/{}'.format(timestamp)
 DO_DELETE = False
 USE_BUCKET = True
 BUCKET = 'redbert'
@@ -130,7 +131,7 @@ supported_modes = {
 
 train, test = train_test_split(supported_modes[MASK_MODE], test_size=0.10)
 
-print(f"Created training dataset for {MASK_MODE}")
+print("Created training dataset for {}".format(MASK_MODE))
 
 print("Train dataset breakdown:")
 print(train.groupby('label').count())
@@ -202,7 +203,7 @@ train_input_fn = bert.run_classifier.input_fn_builder(
     is_training=True,
     drop_remainder=False)
 
-print(f'Beginning Training!')
+print('Beginning Training!')
 current_time = datetime.now()
 estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 print("Training took time ", datetime.now() - current_time)
