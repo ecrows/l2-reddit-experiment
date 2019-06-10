@@ -1,6 +1,4 @@
 scikit-learn
 pandas
-tensorflow
 bert-tensorflow
 tensorflow-hub
-#tensorflow-gpu

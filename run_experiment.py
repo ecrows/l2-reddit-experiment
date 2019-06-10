@@ -19,6 +19,8 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 import tensorflow as tf
 import tensorflow_hub as hub
+import os
+import errno
 from datetime import datetime
 import bert
 from bert import run_classifier
@@ -64,8 +66,22 @@ print('***** Model output directory: {} *****'.format(OUTPUT_DIR))
 
 seed = 44
 
+try:
+    os.mkdir("/tmp/reddit-data")
+except OSError as e:
+    if e.errno != errno.EEXIST:
+        raise
+
+files_to_get = ["gs://redbert/reddit-data/ground_truth_lines.txt"]
+
+for file in files_to_get:
+    info = tf.gfile.Stat(file)
+    print(info)
+
+    #if tf.gfile.Exists("/tmp/reddit
 # TODO: Convert to gfile calls
-# !mkdir /tmp/reddit-data
+#tf.gfile.Copy("gs://redbert/reddit-data/ground_truth_lines.txt", "/tmp/reddit-data/")
+exit()
 # !gsutil cp gs://redbert/reddit-data/ground_truth_lines.txt /tmp/reddit-data
 # !gsutil cp gs://redbert/reddit-data/reddit_random_lines.txt /tmp/reddit-data
 # !gsutil cp gs://redbert/reddit-data/l2_lines.txt /tmp/reddit-data
