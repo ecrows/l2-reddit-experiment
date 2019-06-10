@@ -43,7 +43,7 @@ else:
 
 #auth.authenticate_user()
 
-timestamp = datetime.now().timestamp()
+timestamp = int(datetime.now().timestamp()*1000)
 OUTPUT_DIR = 'validation-models/{}'.format(timestamp)
 DO_DELETE = False
 USE_BUCKET = True
