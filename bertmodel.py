@@ -26,8 +26,7 @@ from bert import tokenization
 
 BERT_MODEL_HUB = "https://tfhub.dev/google/bert_uncased_L-12_H-768_A-12/1"
 
-def create_tokenizer_from_hub_module():
-  """Get the vocab file and casing info from the Hub module."""
+"""def create_tokenizer_from_hub_module():
   with tf.Graph().as_default():
     bert_module = hub.Module(BERT_MODEL_HUB)
     tokenization_info = bert_module(signature="tokenization_info", as_dict=True)
@@ -36,7 +35,7 @@ def create_tokenizer_from_hub_module():
                                             tokenization_info["do_lower_case"]])
       
   return bert.tokenization.FullTokenizer(
-      vocab_file=vocab_file, do_lower_case=do_lower_case)
+      vocab_file=vocab_file, do_lower_case=do_lower_case)"""
 
 def create_model(is_predicting, input_ids, input_mask, segment_ids, labels,
                  num_labels):
@@ -100,6 +99,7 @@ def model_fn_builder(num_labels, learning_rate, num_train_steps,
     input_mask = features["input_mask"]
     segment_ids = features["segment_ids"]
     label_ids = features["label_ids"]
+    print(features["label_ids"])
 
     is_predicting = (mode == tf.estimator.ModeKeys.PREDICT)
     
@@ -110,7 +110,7 @@ def model_fn_builder(num_labels, learning_rate, num_train_steps,
         is_predicting, input_ids, input_mask, segment_ids, label_ids, num_labels)
 
       train_op = bert.optimization.create_optimizer(
-          loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=False)
+          loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=True)
 
       # Calculate evaluation metrics. 
       def metric_fn(label_ids, predicted_labels):

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 # Modifications by Evan Crothers, 2019 under Apache License, Version 2.0
-# Requirements: Python3 and run 'pip install bert-tensorflow'
 
 from sklearn.model_selection import KFold
 import pandas as pd
@@ -25,11 +24,40 @@ from datetime import datetime
 import bert
 from bert import run_classifier
 from bert import optimization
+from bert import modeling
 from bert import tokenization
 from tensorflow.errors import AlreadyExistsError
+import tensorflow.contrib.tpu
+import tensorflow.contrib.cluster_resolver
 
-import bertmodel
+#import bertmodel
 import sys
+
+#import tempfile
+import subprocess
+
+class FLAGS(object):
+  use_tpu=True
+  tpu_name="worker1"
+  # Use a local temporary path for the `model_dir`
+  # model_dir = tempfile.mkdtemp()
+  # Number of training steps to run on the Cloud TPU before returning control.
+  iterations = 50
+  # A single Cloud TPU has 8 shards.
+  num_shards = 8
+
+if FLAGS.use_tpu:
+    #my_project_name = subprocess.check_output([
+    #    'gcloud','config','get-value','project'])
+    #my_zone = subprocess.check_output([
+    #    'gcloud','config','get-value','compute/zone'])
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+            tpu=[FLAGS.tpu_name],
+            zone="us-central1-f",
+            project="abyss-gan")
+    master = tpu_cluster_resolver.get_master()
+#else:
+    #master = ''
 
 if len(sys.argv) < 3:
   print("This script requires an argument for masked or unmasked mode, as well as for random seed.")
@@ -46,11 +74,17 @@ else:
 # TODO: Some sort of validation probably. Use a library, seriously man.
 seed = int(sys.argv[2])
 
-#auth.authenticate_user()
+# TODO: Wow please go back to FLAGS
+# TODO: Download from official BERT bucket
+BASE_DIR = "gs://redbert/bert-base"
+bert_config = modeling.BertConfig.from_json_file("{}/bert_config.json".format(BASE_DIR))
+init_checkpoint = "{}/bert_model.ckpt".format(BASE_DIR)
+vocab_file = "{}/vocab.txt".format(BASE_DIR)
 
 timestamp = int(datetime.now().timestamp()*1000)
+#timestamp = 1560322087375
 NUM_FOLDS = 10
-OUTPUT_DIR = 'validation-models/seed{}_{}'.format(seed, timestamp)
+OUTPUT_DIR = 'validation-models/{}_{}_seed{}'.format(timestamp, MASK_MODE, seed)
 #DO_DELETE = False
 USE_BUCKET = True
 BUCKET = 'redbert'
@@ -129,7 +163,6 @@ supported_modes = {
 }
 
 kf = KFold(n_splits=NUM_FOLDS, shuffle=True, random_state=seed)
-
 X = supported_modes[MASK_MODE]
 
 fold = 0
@@ -165,7 +198,9 @@ for train_index, test_index in kf.split(X):
                                                                        text_b = None, 
                                                                        label = x[LABEL_COLUMN]), axis = 1)
 
-    tokenizer = bertmodel.create_tokenizer_from_hub_module()
+    tokenizer = tokenization.FullTokenizer(
+                  vocab_file=vocab_file, do_lower_case=True)
+    #tokenizer = bertmodel.create_tokenizer_from_hub_module()
 
     MAX_SEQ_LENGTH = 128
 
@@ -177,7 +212,7 @@ for train_index, test_index in kf.split(X):
     # These hyperparameters are copied from this colab notebook (https://colab.sandbox.google.com/github/tensorflow/tpu/blob/master/tools/colab/bert_finetuning_with_cloud_tpus.ipynb)
     BATCH_SIZE = 32
     LEARNING_RATE = 2e-5
-    NUM_TRAIN_EPOCHS = 3.0
+    NUM_TRAIN_EPOCHS = 1.0 # TODO: 3.0
     # Warmup is a period of time where hte learning rate 
     # is small and gradually increases--usually helps training.
     WARMUP_PROPORTION = 0.1
@@ -189,46 +224,81 @@ for train_index, test_index in kf.split(X):
     num_train_steps = int(len(train_features) / BATCH_SIZE * NUM_TRAIN_EPOCHS)
     num_warmup_steps = int(num_train_steps * WARMUP_PROPORTION)
 
-    # Specify outpit directory and number of checkpoint steps to save
-    run_config = tf.estimator.RunConfig(
-        model_dir=model_path,
-        save_summary_steps=SAVE_SUMMARY_STEPS,
-        save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
+    # Specify output directory and number of checkpoint steps to save
+    #run_config = tf.contrib.tpu.RunConfig(
+    #    model_dir=model_path,
+    #    save_summary_steps=SAVE_SUMMARY_STEPS,
+    #    save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
 
-    model_fn = bertmodel.model_fn_builder(
+    run_config = tf.contrib.tpu.RunConfig(
+     model_dir=model_path,
+     save_summary_steps=SAVE_SUMMARY_STEPS,
+     save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS,
+     master=master,
+     evaluation_master=master,
+     session_config=tf.ConfigProto(
+         allow_soft_placement=True, log_device_placement=True),
+     tpu_config=tf.contrib.tpu.TPUConfig(FLAGS.iterations,
+                                        FLAGS.num_shards),
+    )
+
+    #run_config = tf.estimator.RunConfig(
+        #model_dir=model_path,
+        #save_summary_steps=SAVE_SUMMARY_STEPS,
+        #save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
+
+    model_fn = bert.run_classifier.model_fn_builder(
+      bert_config=bert_config,
       num_labels=len(label_list),
+      init_checkpoint=init_checkpoint,
       learning_rate=LEARNING_RATE,
       num_train_steps=num_train_steps,
-      num_warmup_steps=num_warmup_steps)
+      num_warmup_steps=num_warmup_steps,
+      use_tpu=True,
+      use_one_hot_embeddings=True) # Last one because TPU true?
 
-    estimator = tf.estimator.Estimator(
+    #model_fn = bertmodel.model_fn_builder(
+      #num_labels=len(label_list),
+      #learning_rate=LEARNING_RATE,
+      #num_train_steps=num_train_steps,
+      #num_warmup_steps=num_warmup_steps)
+
+    estimator = tf.contrib.tpu.TPUEstimator(
       model_fn=model_fn,
-      config=run_config,
-      params={"batch_size": BATCH_SIZE})
-
-    """Next we create an input builder function that takes our training feature set (`train_features`) and produces a generator. This is a pretty standard design pattern for working with Tensorflow Estimators"""
+      use_tpu=FLAGS.use_tpu,
+      train_batch_size=BATCH_SIZE,
+      eval_batch_size=BATCH_SIZE,
+      predict_batch_size=BATCH_SIZE,
+      config=run_config
+      )
 
     # Create an input function for training. drop_remainder = True for using TPUs.
     train_input_fn = bert.run_classifier.input_fn_builder(
         features=train_features,
         seq_length=MAX_SEQ_LENGTH,
         is_training=True,
-        drop_remainder=False)
+        drop_remainder=True
+    )
 
     print('Beginning Training!')
     current_time = datetime.now()
     estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
     print("Training took time ", datetime.now() - current_time)
 
+    eval_steps = None
+    if FLAGS.use_tpu:
+        eval_steps = int(len(test_features) // BATCH_SIZE)
+        print("Setting eval_steps to {}. Dropping remainder.".format(eval_steps))
+
     """Evaluate model"""
-    test_input_fn = run_classifier.input_fn_builder(
+    test_input_fn = bert.run_classifier.input_fn_builder(
         features=test_features,
         seq_length=MAX_SEQ_LENGTH,
         is_training=False,
-        drop_remainder=False)
+        drop_remainder=True
+    )
 
-    results = estimator.evaluate(input_fn=test_input_fn, steps=None)
-
-    print("Printing results...")
+    results = estimator.evaluate(input_fn=test_input_fn, steps=eval_steps)
+    
     print(results)
 
