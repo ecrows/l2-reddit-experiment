@@ -15,7 +15,7 @@
 # Modifications by Evan Crothers, 2019 under Apache License, Version 2.0
 # Requirements: Python3 and run 'pip install bert-tensorflow'
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
 import pandas as pd
 import tensorflow as tf
 import tensorflow_hub as hub
@@ -31,8 +31,8 @@ from bert import tokenization
 import bertmodel
 import sys
 
-if len(sys.argv) < 2:
-  print("This script requires an argument for masked or unmasked mode.")
+if len(sys.argv) < 3:
+  print("This script requires an argument for masked or unmasked mode, as well as for random seed.")
   exit()
 
 if sys.argv[1] == 'masked':
@@ -43,10 +43,13 @@ else:
   print("Invalid mask mode.")
   exit()
 
+# TODO: Some sort of validation probably. Use a library, seriously man.
+seed = int(sys.argv[2])
+
 #auth.authenticate_user()
 
 timestamp = int(datetime.now().timestamp()*1000)
-OUTPUT_DIR = 'validation-models/{}'.format(timestamp)
+OUTPUT_DIR = 'validation-models/{}_{}'.format(seed, timestamp)
 DO_DELETE = False
 USE_BUCKET = True
 BUCKET = 'redbert'
@@ -64,33 +67,24 @@ if DO_DELETE:
 tf.gfile.MakeDirs(OUTPUT_DIR)
 print('***** Model output directory: {} *****'.format(OUTPUT_DIR))
 
-seed = 44
-
 try:
     os.mkdir("/tmp/reddit-data")
 except OSError as e:
     if e.errno != errno.EEXIST:
         raise
 
-files_to_get = ["gs://redbert/reddit-data/ground_truth_lines.txt"]
+files_to_get = [
+        "gs://redbert/reddit-data/ground_truth_lines.txt",
+        "gs://redbert/reddit-data/reddit_random_lines.txt"
+        ]
 
 for file in files_to_get:
-    info = tf.gfile.Stat(file)
-    print(info)
+    tf.gfile.Copy(file, "/tmp/reddit-data/")
+    #info = tf.gfile.Stat(file)
+    #print(info)
 
-    #if tf.gfile.Exists("/tmp/reddit
-# TODO: Convert to gfile calls
-#tf.gfile.Copy("gs://redbert/reddit-data/ground_truth_lines.txt", "/tmp/reddit-data/")
-exit()
-# !gsutil cp gs://redbert/reddit-data/ground_truth_lines.txt /tmp/reddit-data
-# !gsutil cp gs://redbert/reddit-data/reddit_random_lines.txt /tmp/reddit-data
-# !gsutil cp gs://redbert/reddit-data/l2_lines.txt /tmp/reddit-data
-# !gsutil cp gs://redbert/reddit-data/l2_ne_lines.txt /tmp/reddit-data
-# !gsutil cp gs://redbert/reddit-data/l1samplelines_masked.txt /tmp/reddit-data
-# !gsutil cp gs://redbert/reddit-data/l1samplelines_topten_masked.txt /tmp/reddit-data
-# !gsutil cp gs://redbert/reddit-data/l2_ne_lines.txt /tmp/reddit-data
-# !gsutil cp gs://redbert/reddit-masked/*.txt /tmp/reddit-data
-# !gsutil cp gs://redbert/reddit-data/l1english*.csv /tmp/reddit-data
+    # TODO: Avoid doing it twice
+    #if tf.gfile.Exists("/tmp/reddit-data/(basename)
 
 def load_stripped_lines(filename):
   with open(filename) as f:
@@ -109,35 +103,16 @@ def clip_and_relabel(data, length, label, seed=seed):
   return balanced
 
 gtdf = load_stripped_lines("/tmp/reddit-data/ground_truth_lines.txt")
-l2df = load_stripped_lines("/tmp/reddit-data/l2_lines.txt")
 rrdf = load_stripped_lines("/tmp/reddit-data/reddit_random_lines.txt")
-l2nedf = load_stripped_lines("/tmp/reddit-data/l2_ne_lines.txt")
 
 mask_gtdf = load_stripped_lines("/tmp/reddit-data/ground_truth_masked.txt")
-mask_l2df = load_stripped_lines("/tmp/reddit-data/l2_lines_masked.txt")
-mask_l2nedf = load_stripped_lines("/tmp/reddit-data/l2_ne_masked.txt")
 mask_rrdf = load_stripped_lines("/tmp/reddit-data/reddit_random_masked.txt")
   
 rr_balanced = clip_and_relabel(rrdf, len(gtdf), 0)
 gt_balanced = clip_and_relabel(gtdf, len(gtdf), 1)
-l2_balanced = clip_and_relabel(l2df, len(gtdf), 0)
 
 rrmask_balanced = clip_and_relabel(mask_rrdf, len(gtdf), 0)
 gtmask_balanced = clip_and_relabel(mask_gtdf, len(gtdf), 1)
-l2mask_balanced = clip_and_relabel(mask_l2df, len(gtdf), 0)
-
-l2ne_balanced = clip_and_relabel(l2nedf, len(gtdf), 0)
-l2nemask_balanced = clip_and_relabel(mask_l2nedf, len(gtdf), 0)
-
-# These two were generated offline in order to avoid reuploading too many GB
-l1df = pd.read_csv("/tmp/reddit-data/l1english_sample.csv")
-l1nedf = pd.read_csv("/tmp/reddit-data/l1english_topten_sample.csv")
-
-mask_l1nedf = load_stripped_lines("/tmp/reddit-data/l1samplelines_topten_masked.txt")
-mask_l1df = load_stripped_lines("/tmp/reddit-data/l1samplelines_masked.txt")
-
-l1mask_balanced = clip_and_relabel(mask_l1df, len(gtdf), 0)
-l1nemask_balanced = clip_and_relabel(mask_l1nedf, len(gtdf), 0)
 
 """Now that we have our data we can split it into test and train datasets."""
 supported_modes = {
@@ -145,7 +120,9 @@ supported_modes = {
     'masked': rrmask_balanced.append(gtmask_balanced),
 }
 
-train, test = train_test_split(supported_modes[MASK_MODE], test_size=0.10)
+train, test = KFold(n_splits=10, shuffle=True, random_state=seed)
+
+supported_modes[MASK_MODE]
 
 print("Created training dataset for {}".format(MASK_MODE))
 
@@ -233,138 +210,3 @@ test_input_fn = run_classifier.input_fn_builder(
 
 estimator.evaluate(input_fn=test_input_fn, steps=None)
 
-"""Evaluation against L2 datasets"""
-l2_relabelled = l2_balanced
-l2_relabelled['label'] = 0
-
-l2mask_relabelled = l2mask_balanced
-l2mask_relabelled['label'] = 0
-
-l2ne_relabelled = l2ne_balanced
-l2ne_relabelled['label'] = 0
-
-l2nemask_relabelled = l2nemask_balanced
-l2nemask_relabelled['label'] = 0
-
-l1nemask_relabelled = l1nemask_balanced
-l1nemask_relabelled['label'] = 0
-
-l1mask_relabelled = l1mask_balanced
-l1mask_relabelled['label'] = 0
-
-l2mask_InputExamples = l2mask_relabelled.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
-
-l2mask_features = bert.run_classifier.convert_examples_to_features(l2mask_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-
-l2_InputExamples = l2_relabelled.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
-
-l2_features = bert.run_classifier.convert_examples_to_features(l2_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-
-l2nemask_InputExamples = l2nemask_relabelled.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
-
-l2nemask_features = bert.run_classifier.convert_examples_to_features(l2nemask_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-
-l2ne_InputExamples = l2ne_relabelled.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
-
-l2ne_features = bert.run_classifier.convert_examples_to_features(l2ne_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-
-l1_InputExamples = l1df.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
-
-l1_features = bert.run_classifier.convert_examples_to_features(l1_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-
-l1ne_InputExamples = l1nedf.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
-
-l1ne_features = bert.run_classifier.convert_examples_to_features(l1ne_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-
-l1mask_InputExamples = l1mask_relabelled.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
-
-l1mask_features = bert.run_classifier.convert_examples_to_features(l1mask_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-
-l1nemask_InputExamples = l1nemask_relabelled.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
-
-l1nemask_features = bert.run_classifier.convert_examples_to_features(l1nemask_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-
-# Evaluate misclassifications on random L2 comments.
-l2_test_input_fn = run_classifier.input_fn_builder(
-    features=l2_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
-
-l2mask_test_input_fn = run_classifier.input_fn_builder(
-    features=l2mask_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
-
-l2ne_test_input_fn = run_classifier.input_fn_builder(
-    features=l2ne_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
-
-l2nemask_test_input_fn = run_classifier.input_fn_builder(
-    features=l2nemask_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
-
-# Evaluate misclassifications on random L1 English comments
-
-l1_test_input_fn = run_classifier.input_fn_builder(
-    features=l1_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
-
-l1ne_test_input_fn = run_classifier.input_fn_builder(
-    features=l1ne_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
-
-l1mask_test_input_fn = run_classifier.input_fn_builder(
-    features=l1mask_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
-
-l1nemask_test_input_fn = run_classifier.input_fn_builder(
-    features=l1nemask_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
-
-# TODO: Output to file, save to cloud
-estimator.evaluate(input_fn=l1_test_input_fn, steps=None)
-estimator.evaluate(input_fn=l1ne_test_input_fn, steps=None)
-estimator.evaluate(input_fn=l1mask_test_input_fn, steps=None)
-estimator.evaluate(input_fn=l1nemask_test_input_fn, steps=None)
-estimator.evaluate(input_fn=l2_test_input_fn, steps=None)
-estimator.evaluate(input_fn=l2mask_test_input_fn, steps=None)
-estimator.evaluate(input_fn=l2ne_test_input_fn, steps=None)
-estimator.evaluate(input_fn=l2nemask_test_input_fn, steps=None)
