@@ -26,7 +26,7 @@ import bert
 from bert import run_classifier
 from bert import optimization
 from bert import tokenization
-#from google.colab import auth
+from tensorflow.errors import AlreadyExistsError
 
 import bertmodel
 import sys
@@ -49,23 +49,22 @@ seed = int(sys.argv[2])
 #auth.authenticate_user()
 
 timestamp = int(datetime.now().timestamp()*1000)
-OUTPUT_DIR = 'validation-models/{}_{}'.format(seed, timestamp)
-DO_DELETE = False
+NUM_FOLDS = 10
+OUTPUT_DIR = 'validation-models/seed{}_{}'.format(seed, timestamp)
+#DO_DELETE = False
 USE_BUCKET = True
 BUCKET = 'redbert'
 
 if USE_BUCKET:
   OUTPUT_DIR = 'gs://{}/{}'.format(BUCKET, OUTPUT_DIR)
 
-if DO_DELETE:
-  try:
-    tf.gfile.DeleteRecursively(OUTPUT_DIR)
-  except:
+#if DO_DELETE:
+#  try:
+#    tf.gfile.DeleteRecursively(OUTPUT_DIR)
+#  except:
     # Doesn't matter if the directory didn't exist
-    pass
+#    pass
 
-tf.gfile.MakeDirs(OUTPUT_DIR)
-print('***** Model output directory: {} *****'.format(OUTPUT_DIR))
 
 try:
     os.mkdir("/tmp/reddit-data")
@@ -75,11 +74,20 @@ except OSError as e:
 
 files_to_get = [
         "gs://redbert/reddit-data/ground_truth_lines.txt",
-        "gs://redbert/reddit-data/reddit_random_lines.txt"
+        "gs://redbert/reddit-data/ground_truth_masked.txt",
+        "gs://redbert/reddit-data/reddit_random_lines.txt",
+        "gs://redbert/reddit-data/reddit_random_masked.txt"
         ]
 
 for file in files_to_get:
-    tf.gfile.Copy(file, "/tmp/reddit-data/")
+    try:
+        basename = file[file.rindex("/")+1:]
+        tf.gfile.Copy(file, "/tmp/reddit-data/{}".format(basename))
+    except AlreadyExistsError as e:
+        # Fine if we've already downloaded it, just continue
+        print("File {} already exists. Skipping download...".format(file))
+        pass
+
     #info = tf.gfile.Stat(file)
     #print(info)
 
@@ -117,96 +125,110 @@ gtmask_balanced = clip_and_relabel(mask_gtdf, len(gtdf), 1)
 """Now that we have our data we can split it into test and train datasets."""
 supported_modes = {
     'unmasked': rr_balanced.append(gt_balanced),
-    'masked': rrmask_balanced.append(gtmask_balanced),
+    'masked': rrmask_balanced.append(gtmask_balanced)
 }
 
-train, test = KFold(n_splits=10, shuffle=True, random_state=seed)
+kf = KFold(n_splits=NUM_FOLDS, shuffle=True, random_state=seed)
 
-supported_modes[MASK_MODE]
+X = supported_modes[MASK_MODE]
 
-print("Created training dataset for {}".format(MASK_MODE))
+fold = 0
 
-print("Train dataset breakdown:")
-print(train.groupby('label').count())
+for train_index, test_index in kf.split(X):
+    fold += 1
+    model_path = "{}_fold{}of{}".format(OUTPUT_DIR, fold, NUM_FOLDS)
+    tf.gfile.MakeDirs(model_path)
+    print('***** Model output directory: {} *****'.format(model_path))
 
-print("Test dataset breakdown:")
-print(test.groupby('label').count())
+    print("TRAIN:", train_index, "TEST:", test_index)
+    train, test = X.iloc[train_index], X.iloc[test_index]
 
-DATA_COLUMN = 'sentence'
-LABEL_COLUMN = 'label'
-label_list = [0, 1]
+    print("Created training dataset for {}".format(MASK_MODE))
 
-train_InputExamples = train.apply(lambda x: bert.run_classifier.InputExample(guid=None, # Globally unique ID for bookkeeping, unused in this example
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
+    print("Train dataset breakdown:")
+    print(train.groupby('label').count())
 
-test_InputExamples = test.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
-                                                                   text_a = x[DATA_COLUMN], 
-                                                                   text_b = None, 
-                                                                   label = x[LABEL_COLUMN]), axis = 1)
+    print("Test dataset breakdown:")
+    print(test.groupby('label').count())
 
-tokenizer = bertmodel.create_tokenizer_from_hub_module()
+    DATA_COLUMN = 'sentence'
+    LABEL_COLUMN = 'label'
+    label_list = [0, 1]
 
-MAX_SEQ_LENGTH = 128
+    train_InputExamples = train.apply(lambda x: bert.run_classifier.InputExample(guid=None,
+                                                                       text_a = x[DATA_COLUMN], 
+                                                                       text_b = None, 
+                                                                       label = x[LABEL_COLUMN]), axis = 1)
 
-# Convert our train and test features to InputFeatures that BERT understands.
-train_features = bert.run_classifier.convert_examples_to_features(train_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
-test_features = bert.run_classifier.convert_examples_to_features(test_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
+    test_InputExamples = test.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
+                                                                       text_a = x[DATA_COLUMN], 
+                                                                       text_b = None, 
+                                                                       label = x[LABEL_COLUMN]), axis = 1)
 
-# Compute train and warmup steps from batch size
-# These hyperparameters are copied from this colab notebook (https://colab.sandbox.google.com/github/tensorflow/tpu/blob/master/tools/colab/bert_finetuning_with_cloud_tpus.ipynb)
-BATCH_SIZE = 32
-LEARNING_RATE = 2e-5
-NUM_TRAIN_EPOCHS = 3.0
-# Warmup is a period of time where hte learning rate 
-# is small and gradually increases--usually helps training.
-WARMUP_PROPORTION = 0.1
-# Model configs
-SAVE_CHECKPOINTS_STEPS = 500
-SAVE_SUMMARY_STEPS = 100
+    tokenizer = bertmodel.create_tokenizer_from_hub_module()
 
-# Compute # train and warmup steps from batch size
-num_train_steps = int(len(train_features) / BATCH_SIZE * NUM_TRAIN_EPOCHS)
-num_warmup_steps = int(num_train_steps * WARMUP_PROPORTION)
+    MAX_SEQ_LENGTH = 128
 
-# Specify outpit directory and number of checkpoint steps to save
-run_config = tf.estimator.RunConfig(
-    model_dir=OUTPUT_DIR,
-    save_summary_steps=SAVE_SUMMARY_STEPS,
-    save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
+    # Convert our train and test features to InputFeatures that BERT understands.
+    train_features = bert.run_classifier.convert_examples_to_features(train_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
+    test_features = bert.run_classifier.convert_examples_to_features(test_InputExamples, label_list, MAX_SEQ_LENGTH, tokenizer)
 
-model_fn = bertmodel.model_fn_builder(
-  num_labels=len(label_list),
-  learning_rate=LEARNING_RATE,
-  num_train_steps=num_train_steps,
-  num_warmup_steps=num_warmup_steps)
+    # Compute train and warmup steps from batch size
+    # These hyperparameters are copied from this colab notebook (https://colab.sandbox.google.com/github/tensorflow/tpu/blob/master/tools/colab/bert_finetuning_with_cloud_tpus.ipynb)
+    BATCH_SIZE = 32
+    LEARNING_RATE = 2e-5
+    NUM_TRAIN_EPOCHS = 3.0
+    # Warmup is a period of time where hte learning rate 
+    # is small and gradually increases--usually helps training.
+    WARMUP_PROPORTION = 0.1
+    # Model configs
+    SAVE_CHECKPOINTS_STEPS = 500
+    SAVE_SUMMARY_STEPS = 100
 
-estimator = tf.estimator.Estimator(
-  model_fn=bertmodel.model_fn,
-  config=run_config,
-  params={"batch_size": BATCH_SIZE})
+    # Compute # train and warmup steps from batch size
+    num_train_steps = int(len(train_features) / BATCH_SIZE * NUM_TRAIN_EPOCHS)
+    num_warmup_steps = int(num_train_steps * WARMUP_PROPORTION)
 
-"""Next we create an input builder function that takes our training feature set (`train_features`) and produces a generator. This is a pretty standard design pattern for working with Tensorflow Estimators"""
+    # Specify outpit directory and number of checkpoint steps to save
+    run_config = tf.estimator.RunConfig(
+        model_dir=model_path,
+        save_summary_steps=SAVE_SUMMARY_STEPS,
+        save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
 
-# Create an input function for training. drop_remainder = True for using TPUs.
-train_input_fn = bert.run_classifier.input_fn_builder(
-    features=train_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=True,
-    drop_remainder=False)
+    model_fn = bertmodel.model_fn_builder(
+      num_labels=len(label_list),
+      learning_rate=LEARNING_RATE,
+      num_train_steps=num_train_steps,
+      num_warmup_steps=num_warmup_steps)
 
-print('Beginning Training!')
-current_time = datetime.now()
-estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
-print("Training took time ", datetime.now() - current_time)
+    estimator = tf.estimator.Estimator(
+      model_fn=model_fn,
+      config=run_config,
+      params={"batch_size": BATCH_SIZE})
 
-"""Evaluate model"""
-test_input_fn = run_classifier.input_fn_builder(
-    features=test_features,
-    seq_length=MAX_SEQ_LENGTH,
-    is_training=False,
-    drop_remainder=False)
+    """Next we create an input builder function that takes our training feature set (`train_features`) and produces a generator. This is a pretty standard design pattern for working with Tensorflow Estimators"""
 
-estimator.evaluate(input_fn=test_input_fn, steps=None)
+    # Create an input function for training. drop_remainder = True for using TPUs.
+    train_input_fn = bert.run_classifier.input_fn_builder(
+        features=train_features,
+        seq_length=MAX_SEQ_LENGTH,
+        is_training=True,
+        drop_remainder=False)
+
+    print('Beginning Training!')
+    current_time = datetime.now()
+    estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
+    print("Training took time ", datetime.now() - current_time)
+
+    """Evaluate model"""
+    test_input_fn = run_classifier.input_fn_builder(
+        features=test_features,
+        seq_length=MAX_SEQ_LENGTH,
+        is_training=False,
+        drop_remainder=False)
+
+    results = estimator.evaluate(input_fn=test_input_fn, steps=None)
+
+    print("Printing results...")
+    print(results)
 
