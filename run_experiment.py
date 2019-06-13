@@ -17,7 +17,6 @@
 from sklearn.model_selection import KFold
 import pandas as pd
 import tensorflow as tf
-import tensorflow_hub as hub
 import os
 import errno
 from datetime import datetime
@@ -29,6 +28,8 @@ from bert import tokenization
 from tensorflow.errors import AlreadyExistsError
 import tensorflow.contrib.tpu
 import tensorflow.contrib.cluster_resolver
+
+import eval_model
 
 #import bertmodel
 import sys
@@ -81,8 +82,8 @@ bert_config = modeling.BertConfig.from_json_file("{}/bert_config.json".format(BA
 init_checkpoint = "{}/bert_model.ckpt".format(BASE_DIR)
 vocab_file = "{}/vocab.txt".format(BASE_DIR)
 
-timestamp = int(datetime.now().timestamp()*1000)
-#timestamp = 1560322087375
+#timestamp = int(datetime.now().timestamp()*1000)
+timestamp = 1560464604587
 NUM_FOLDS = 10
 OUTPUT_DIR = 'validation-models/{}_{}_seed{}'.format(timestamp, MASK_MODE, seed)
 #DO_DELETE = False
@@ -247,7 +248,8 @@ for train_index, test_index in kf.split(X):
         #save_summary_steps=SAVE_SUMMARY_STEPS,
         #save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
 
-    model_fn = bert.run_classifier.model_fn_builder(
+    """
+    model_fn = eval_model.model_fn_builder(
       bert_config=bert_config,
       num_labels=len(label_list),
       init_checkpoint=init_checkpoint,
@@ -256,12 +258,15 @@ for train_index, test_index in kf.split(X):
       num_warmup_steps=num_warmup_steps,
       use_tpu=True,
       use_one_hot_embeddings=True) # Last one because TPU true?
+    """
 
-    #model_fn = bertmodel.model_fn_builder(
-      #num_labels=len(label_list),
-      #learning_rate=LEARNING_RATE,
-      #num_train_steps=num_train_steps,
-      #num_warmup_steps=num_warmup_steps)
+    model_fn = eval_model.model_fn_builder(
+      bert_config=bert_config,
+      num_labels=len(label_list),
+      init_checkpoint=init_checkpoint,
+      learning_rate=LEARNING_RATE,
+      num_train_steps=num_train_steps,
+      num_warmup_steps=num_warmup_steps)
 
     estimator = tf.contrib.tpu.TPUEstimator(
       model_fn=model_fn,
@@ -297,8 +302,32 @@ for train_index, test_index in kf.split(X):
         is_training=False,
         drop_remainder=True
     )
+   
+    """
+    test_model_fn = eval_model.model_fn_builder(
+      bert_config=bert_config,
+      num_labels=len(label_list),
+      init_checkpoint=init_checkpoint,
+      learning_rate=LEARNING_RATE,
+      num_train_steps=num_train_steps,
+      num_warmup_steps=num_warmup_steps,
+      use_tpu=True,
+      use_one_hot_embeddings=True) # Last one because TPU true?
+    """
+
+    """
+    test_estimator = tf.contrib.tpu.TPUEstimator(
+      model_fn=test_model_fn,
+      use_tpu=FLAGS.use_tpu,
+      train_batch_size=BATCH_SIZE,
+      eval_batch_size=BATCH_SIZE,
+      predict_batch_size=BATCH_SIZE,
+      config=run_config
+      )
+    """
 
     results = estimator.evaluate(input_fn=test_input_fn, steps=eval_steps)
     
     print(results)
+    break
 
