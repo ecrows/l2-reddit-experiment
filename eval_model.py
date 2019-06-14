@@ -40,7 +40,8 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids, l
   with tf.variable_scope("loss"):
 
     # Dropout helps prevent overfitting
-    output_layer = tf.nn.dropout(output_layer, keep_prob=0.9)
+    if is_training:
+        output_layer = tf.nn.dropout(output_layer, keep_prob=0.9)
 
     logits = tf.matmul(output_layer, output_weights, transpose_b=True)
     logits = tf.nn.bias_add(logits, output_bias)

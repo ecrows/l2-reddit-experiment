@@ -29,7 +29,7 @@ from tensorflow.errors import AlreadyExistsError
 import tensorflow.contrib.tpu
 import tensorflow.contrib.cluster_resolver
 
-import eval_model
+import basic_model
 
 #import bertmodel
 import sys
@@ -49,7 +49,7 @@ class FLAGS(object):
   # Use a local temporary path for the `model_dir`
   # model_dir = tempfile.mkdtemp()
   # Number of training steps to run on the Cloud TPU before returning control.
-  iterations = 20
+  iterations = 1000
   # A single Cloud TPU has 8 shards.
   num_shards = 8
 
@@ -59,30 +59,29 @@ if FLAGS.use_tpu:
     #my_zone = subprocess.check_output([
     #    'gcloud','config','get-value','compute/zone'])
     tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-            tpu=[FLAGS.tpu_name],
-            zone="us-central1-f",
+            tpu="worker1",
+            zone="us-central1-a",
             project="abyss-gan")
-    master = tpu_cluster_resolver.get_master()
-#else:
-    #master = ''
 
 if len(sys.argv) < 3:
   print("This script requires an argument for masked or unmasked mode, as well as for random seed.")
   exit()
 
-if sys.argv[1] == 'masked':
+MASK_MODE = sys.argv[1]
+
+"""if sys.argv[1] == 'masked':
   MASK_MODE = 'masked'
 elif sys.argv[1] == 'unmasked':
   MASK_MODE = 'unmasked'
 else:
   print("Invalid mask mode.")
   exit()
+"""
 
 # TODO: Some sort of validation probably. Use a library, seriously man.
 seed = int(sys.argv[2])
 
 # TODO: Wow please go back to FLAGS
-# TODO: Download from official BERT bucket
 BASE_DIR = "gs://redbert/bert-base"
 bert_config = modeling.BertConfig.from_json_file("{}/bert_config.json".format(BASE_DIR))
 init_checkpoint = "{}/bert_model.ckpt".format(BASE_DIR)
@@ -164,6 +163,8 @@ gtmask_balanced = clip_and_label(mask_gtdf, len(gtdf), "1")
 
 """Now that we have our data we can split it into test and train datasets."""
 supported_modes = {
+    'all_pos': gt_balanced.append(gt_balanced),
+    'all_neg': rr_balanced.append(rr_balanced),
     'unmasked': rr_balanced.append(gt_balanced),
     'masked': rrmask_balanced.append(gtmask_balanced)
 }
@@ -217,9 +218,11 @@ for train_index, test_index in kf.split(X):
 
     # Compute train and warmup steps from batch size
     # These hyperparameters are copied from this colab notebook (https://colab.sandbox.google.com/github/tensorflow/tpu/blob/master/tools/colab/bert_finetuning_with_cloud_tpus.ipynb)
-    BATCH_SIZE = 64 # TODO: Originally 32, increasing to 64 out of curiousity for TPU
+    BATCH_SIZE = 32 # TODO: Originally 32, increasing to 64 out of curiousity for TPU
+    PREDICT_BATCH_SIZE = 8
+    EVAL_BATCH_SIZE = 8
     LEARNING_RATE = 2e-5
-    NUM_TRAIN_EPOCHS = 1.0 # TODO: 3.0
+    NUM_TRAIN_EPOCHS = 3.0 # TODO: 3.0
     # Warmup is a period of time where hte learning rate 
     # is small and gradually increases--usually helps training.
     WARMUP_PROPORTION = 0.1
@@ -231,31 +234,33 @@ for train_index, test_index in kf.split(X):
     num_train_steps = int(len(train_features) / BATCH_SIZE * NUM_TRAIN_EPOCHS)
     num_warmup_steps = int(num_train_steps * WARMUP_PROPORTION)
 
+    print("{} train features, {} test features".format(len(train_features), len(test_features)))
+    print("Running {} training steps!".format(num_train_steps))
+    print("Running {} warmup steps!".format(num_warmup_steps))
+
     # Specify output directory and number of checkpoint steps to save
     #run_config = tf.contrib.tpu.RunConfig(
     #    model_dir=model_path,
     #    save_summary_steps=SAVE_SUMMARY_STEPS,
     #    save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
 
+    is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
     run_config = tf.contrib.tpu.RunConfig(
-     model_dir=model_path,
-     save_summary_steps=SAVE_SUMMARY_STEPS,
-     save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS,
-     master=master,
-     evaluation_master=master,
-     session_config=tf.ConfigProto(
-         allow_soft_placement=True, log_device_placement=True),
-     tpu_config=tf.contrib.tpu.TPUConfig(FLAGS.iterations,
-                                        FLAGS.num_shards),
-    )
+      cluster=tpu_cluster_resolver,
+      master=None,
+      model_dir=model_path,
+      save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS,
+      tpu_config=tf.contrib.tpu.TPUConfig(
+          iterations_per_loop=FLAGS.iterations,
+          num_shards=FLAGS.num_shards,
+          per_host_input_for_training=is_per_host))
 
     #run_config = tf.estimator.RunConfig(
         #model_dir=model_path,
         #save_summary_steps=SAVE_SUMMARY_STEPS,
         #save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
 
-    """
-    model_fn = eval_model.model_fn_builder(
+    model_fn = basic_model.model_fn_builder(
       bert_config=bert_config,
       num_labels=len(label_list),
       init_checkpoint=init_checkpoint,
@@ -263,24 +268,16 @@ for train_index, test_index in kf.split(X):
       num_train_steps=num_train_steps,
       num_warmup_steps=num_warmup_steps,
       use_tpu=True,
-      use_one_hot_embeddings=True) # Last one because TPU true?
-    """
-
-    model_fn = eval_model.model_fn_builder(
-      bert_config=bert_config,
-      num_labels=len(label_list),
-      init_checkpoint=init_checkpoint,
-      learning_rate=LEARNING_RATE,
-      num_train_steps=num_train_steps,
-      num_warmup_steps=num_warmup_steps)
+      use_one_hot_embeddings=True
+      )
 
     estimator = tf.contrib.tpu.TPUEstimator(
-      model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
+      model_fn=model_fn,
+      config=run_config,
       train_batch_size=BATCH_SIZE,
-      eval_batch_size=BATCH_SIZE,
-      predict_batch_size=BATCH_SIZE,
-      config=run_config
+      eval_batch_size=EVAL_BATCH_SIZE,
+      predict_batch_size=PREDICT_BATCH_SIZE,
       )
 
     # Create an input function for training. drop_remainder = True for using TPUs.
@@ -303,17 +300,18 @@ for train_index, test_index in kf.split(X):
         eval_steps = int(len(test_features) // BATCH_SIZE)
         print("Setting eval_steps to {}. Dropping remainder.".format(eval_steps))
 
-
     print('Pre-training estimate...')
     print(estimator.evaluate(input_fn=test_input_fn, steps=eval_steps))
 
     current_time = datetime.now()
     print('Beginning Training!')
-    for chunk in range(1, int(num_train_steps / 500)):
+    for chunk in range(1, int(num_train_steps / 500)+1):
         print("TRAINING CYCLE:")
+        print("**************************")
         estimator.train(input_fn=train_input_fn, max_steps=chunk*500)
 
         print("CURRENT EVALUATION:")
+        print("**************************")
         print(estimator.evaluate(input_fn=test_input_fn, steps=eval_steps))
 
     #estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
@@ -321,32 +319,7 @@ for train_index, test_index in kf.split(X):
     print("Training took time ", datetime.now() - current_time)
 
     """Evaluate model"""
-   
-    """
-    test_model_fn = eval_model.model_fn_builder(
-      bert_config=bert_config,
-      num_labels=len(label_list),
-      init_checkpoint=init_checkpoint,
-      learning_rate=LEARNING_RATE,
-      num_train_steps=num_train_steps,
-      num_warmup_steps=num_warmup_steps,
-      use_tpu=True,
-      use_one_hot_embeddings=True) # Last one because TPU true?
-    """
-
-    """
-    test_estimator = tf.contrib.tpu.TPUEstimator(
-      model_fn=test_model_fn,
-      use_tpu=FLAGS.use_tpu,
-      train_batch_size=BATCH_SIZE,
-      eval_batch_size=BATCH_SIZE,
-      predict_batch_size=BATCH_SIZE,
-      config=run_config
-      )
-    """
-
     results = estimator.evaluate(input_fn=test_input_fn, steps=eval_steps)
     
     print(results)
     break
-
