@@ -10,10 +10,9 @@ import tensorflow as tf
 
 #def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
                  #labels, num_labels, use_one_hot_embeddings):
-def create_model(bert_config, is_predicting, input_ids, input_mask, segment_ids, labels,
+def create_model(bert_config, is_training, input_ids, input_mask, segment_ids, labels,
                          num_labels):
 
-  is_training = not is_predicting
   """Creates a classification model."""
   model = bert.modeling.BertModel(
       config=bert_config,
@@ -22,23 +21,6 @@ def create_model(bert_config, is_predicting, input_ids, input_mask, segment_ids,
       input_mask=input_mask,
       token_type_ids=segment_ids,
       use_one_hot_embeddings=True) # TODO: Check this
-
-  """
-def create_model(is_predicting, input_ids, input_mask, segment_ids, labels,
-                         num_labels):
-
-  bert_module = hub.Module(
-      BERT_MODEL_HUB,
-      trainable=True)
-  bert_inputs = dict(
-      input_ids=input_ids,
-      input_mask=input_mask,
-      segment_ids=segment_ids)
-  bert_outputs = bert_module(
-      inputs=bert_inputs,
-      signature="tokens",
-      as_dict=True)
-  """
 
   # Use "pooled_output" for classification tasks on an entire sentence.
   # Use "sequence_outputs" for token-level output.
@@ -62,53 +44,23 @@ def create_model(is_predicting, input_ids, input_mask, segment_ids, labels,
 
     logits = tf.matmul(output_layer, output_weights, transpose_b=True)
     logits = tf.nn.bias_add(logits, output_bias)
+    probabilities = tf.nn.softmax(logits, axis=-1)
     log_probs = tf.nn.log_softmax(logits, axis=-1)
 
     # Convert labels into one-hot encoding
     one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
-
     predicted_labels = tf.squeeze(tf.argmax(log_probs, axis=-1, output_type=tf.int32))
+
+    # TODO: Support this
     # If we're predicting, we want predicted labels and the probabiltiies.
-    if is_predicting:
-      return (predicted_labels, log_probs)
+    # if is_predicting:
+    #  return (predicted_labels, log_probs)
 
     # If we're train/eval, compute loss between predicted and actual label
     per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
     loss = tf.reduce_mean(per_example_loss)
-    return (loss, predicted_labels, log_probs)
-
-  # In the demo, we are doing a simple classification task on the entire
-  # segment.
-  #
-  # If you want to use the token-level output, use model.get_sequence_output()
-  # instead.
-  output_layer = model.get_pooled_output()
-
-  hidden_size = output_layer.shape[-1].value
-
-  output_weights = tf.get_variable(
-      "output_weights", [num_labels, hidden_size],
-      initializer=tf.truncated_normal_initializer(stddev=0.02))
-
-  output_bias = tf.get_variable(
-      "output_bias", [num_labels], initializer=tf.zeros_initializer())
-
-  with tf.variable_scope("loss"):
-    if is_training:
-      # I.e., 0.1 dropout
-      output_layer = tf.nn.dropout(output_layer, keep_prob=0.9)
-
-    logits = tf.matmul(output_layer, output_weights, transpose_b=True)
-    logits = tf.nn.bias_add(logits, output_bias)
-    probabilities = tf.nn.softmax(logits, axis=-1)
-    log_probs = tf.nn.log_softmax(logits, axis=-1)
-
-    one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
-
-    per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
-    loss = tf.reduce_mean(per_example_loss)
-
-    return (loss, per_example_loss, logits, probabilities)
+    return (loss, per_example_loss, predicted_labels, log_probs)
+    #return (loss, per_example_loss, logits, probabilities)
 
 # model_fn_builder actually creates our model function
 # using the passed parameters for num_labels, learning_rate, etc.
@@ -147,8 +99,9 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate, nu
     # TRAIN and EVAL
     if not is_predicting:
 
-      (loss, predicted_labels, log_probs) = create_model(bert_config,
-        is_predicting, input_ids, input_mask, segment_ids, label_ids, num_labels)
+      (loss, per_example_loss, predicted_labels, log_probs) = create_model(bert_config,
+      #(loss, per_example_loss, predicted_labels, log_probs) = create_model(bert_config,
+        True, input_ids, input_mask, segment_ids, label_ids, num_labels)
 
       train_op = bert.optimization.create_optimizer(
           loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=True)
@@ -216,7 +169,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate, nu
             scaffold_fn=scaffold_fn)
     else:
       (predicted_labels, log_probs) = create_model(bert_config,
-        is_predicting, input_ids, input_mask, segment_ids, label_ids, num_labels)
+        False, input_ids, input_mask, segment_ids, label_ids, num_labels)
 
       predictions = {
           'probabilities': log_probs,

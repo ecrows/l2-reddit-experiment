@@ -37,13 +37,19 @@ import sys
 #import tempfile
 import subprocess
 
+import logging
+
+# get TF logger
+log = logging.getLogger('tensorflow')
+log.setLevel(logging.INFO)
+
 class FLAGS(object):
   use_tpu=True
   tpu_name="worker1"
   # Use a local temporary path for the `model_dir`
   # model_dir = tempfile.mkdtemp()
   # Number of training steps to run on the Cloud TPU before returning control.
-  iterations = 50
+  iterations = 20
   # A single Cloud TPU has 8 shards.
   num_shards = 8
 
@@ -82,8 +88,8 @@ bert_config = modeling.BertConfig.from_json_file("{}/bert_config.json".format(BA
 init_checkpoint = "{}/bert_model.ckpt".format(BASE_DIR)
 vocab_file = "{}/vocab.txt".format(BASE_DIR)
 
-#timestamp = int(datetime.now().timestamp()*1000)
-timestamp = 1560464604587
+timestamp = int(datetime.now().timestamp()*1000)
+#timestamp = 1560464604587
 NUM_FOLDS = 10
 OUTPUT_DIR = 'validation-models/{}_{}_seed{}'.format(timestamp, MASK_MODE, seed)
 #DO_DELETE = False
@@ -133,8 +139,7 @@ def load_stripped_lines(filename):
   with open(filename) as f:
     return pd.DataFrame([s.strip() for s in f.readlines()])
 
-# TODO: The relabel part is generally unnecessary
-def clip_and_relabel(data, length, label, seed=seed):
+def clip_and_label(data, length, label, seed=seed):
   balanced = data.sample(n=length, random_state=seed).copy()
   
   if len(balanced.columns) == 1:
@@ -151,11 +156,11 @@ rrdf = load_stripped_lines("/tmp/reddit-data/reddit_random_lines.txt")
 mask_gtdf = load_stripped_lines("/tmp/reddit-data/ground_truth_masked.txt")
 mask_rrdf = load_stripped_lines("/tmp/reddit-data/reddit_random_masked.txt")
   
-rr_balanced = clip_and_relabel(rrdf, len(gtdf), 0)
-gt_balanced = clip_and_relabel(gtdf, len(gtdf), 1)
+rr_balanced = clip_and_label(rrdf, len(gtdf), "0")
+gt_balanced = clip_and_label(gtdf, len(gtdf), "1")
 
-rrmask_balanced = clip_and_relabel(mask_rrdf, len(gtdf), 0)
-gtmask_balanced = clip_and_relabel(mask_gtdf, len(gtdf), 1)
+rrmask_balanced = clip_and_label(mask_rrdf, len(gtdf), "0")
+gtmask_balanced = clip_and_label(mask_gtdf, len(gtdf), "1")
 
 """Now that we have our data we can split it into test and train datasets."""
 supported_modes = {
@@ -187,14 +192,15 @@ for train_index, test_index in kf.split(X):
 
     DATA_COLUMN = 'sentence'
     LABEL_COLUMN = 'label'
-    label_list = [0, 1]
+    label_list = ["0", "1"]
+    #TODO: Evaluate guid?
 
-    train_InputExamples = train.apply(lambda x: bert.run_classifier.InputExample(guid=None,
+    train_InputExamples = train.apply(lambda x: bert.run_classifier.InputExample(guid=x.index,
                                                                        text_a = x[DATA_COLUMN], 
                                                                        text_b = None, 
                                                                        label = x[LABEL_COLUMN]), axis = 1)
 
-    test_InputExamples = test.apply(lambda x: bert.run_classifier.InputExample(guid=None, 
+    test_InputExamples = test.apply(lambda x: bert.run_classifier.InputExample(guid=x.index, 
                                                                        text_a = x[DATA_COLUMN], 
                                                                        text_b = None, 
                                                                        label = x[LABEL_COLUMN]), axis = 1)
@@ -211,7 +217,7 @@ for train_index, test_index in kf.split(X):
 
     # Compute train and warmup steps from batch size
     # These hyperparameters are copied from this colab notebook (https://colab.sandbox.google.com/github/tensorflow/tpu/blob/master/tools/colab/bert_finetuning_with_cloud_tpus.ipynb)
-    BATCH_SIZE = 32
+    BATCH_SIZE = 64 # TODO: Originally 32, increasing to 64 out of curiousity for TPU
     LEARNING_RATE = 2e-5
     NUM_TRAIN_EPOCHS = 1.0 # TODO: 3.0
     # Warmup is a period of time where hte learning rate 
@@ -285,23 +291,36 @@ for train_index, test_index in kf.split(X):
         drop_remainder=True
     )
 
-    print('Beginning Training!')
-    current_time = datetime.now()
-    estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
-    print("Training took time ", datetime.now() - current_time)
-
-    eval_steps = None
-    if FLAGS.use_tpu:
-        eval_steps = int(len(test_features) // BATCH_SIZE)
-        print("Setting eval_steps to {}. Dropping remainder.".format(eval_steps))
-
-    """Evaluate model"""
     test_input_fn = bert.run_classifier.input_fn_builder(
         features=test_features,
         seq_length=MAX_SEQ_LENGTH,
         is_training=False,
         drop_remainder=True
     )
+
+    eval_steps = None
+    if FLAGS.use_tpu:
+        eval_steps = int(len(test_features) // BATCH_SIZE)
+        print("Setting eval_steps to {}. Dropping remainder.".format(eval_steps))
+
+
+    print('Pre-training estimate...')
+    print(estimator.evaluate(input_fn=test_input_fn, steps=eval_steps))
+
+    current_time = datetime.now()
+    print('Beginning Training!')
+    for chunk in range(1, int(num_train_steps / 500)):
+        print("TRAINING CYCLE:")
+        estimator.train(input_fn=train_input_fn, max_steps=chunk*500)
+
+        print("CURRENT EVALUATION:")
+        print(estimator.evaluate(input_fn=test_input_fn, steps=eval_steps))
+
+    #estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
+    #print(estimator.evaluate(input_fn=test_input_fn, steps=eval_steps))
+    print("Training took time ", datetime.now() - current_time)
+
+    """Evaluate model"""
    
     """
     test_model_fn = eval_model.model_fn_builder(
