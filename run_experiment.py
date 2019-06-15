@@ -29,7 +29,7 @@ from tensorflow.errors import AlreadyExistsError
 import tensorflow.contrib.tpu
 import tensorflow.contrib.cluster_resolver
 
-import basic_model
+import better_model
 
 #import bertmodel
 import sys
@@ -218,16 +218,16 @@ for train_index, test_index in kf.split(X):
 
     # Compute train and warmup steps from batch size
     # These hyperparameters are copied from this colab notebook (https://colab.sandbox.google.com/github/tensorflow/tpu/blob/master/tools/colab/bert_finetuning_with_cloud_tpus.ipynb)
-    BATCH_SIZE = 32 # TODO: Originally 32, increasing to 64 out of curiousity for TPU
+    BATCH_SIZE = 64 # Originally 32, increasing to 64 for TPU
     PREDICT_BATCH_SIZE = 8
     EVAL_BATCH_SIZE = 8
     LEARNING_RATE = 2e-5
-    NUM_TRAIN_EPOCHS = 3.0 # TODO: 3.0
+    NUM_TRAIN_EPOCHS = 3.0
     # Warmup is a period of time where hte learning rate 
     # is small and gradually increases--usually helps training.
     WARMUP_PROPORTION = 0.1
     # Model configs
-    SAVE_CHECKPOINTS_STEPS = 500
+    SAVE_CHECKPOINTS_STEPS = 1000
     SAVE_SUMMARY_STEPS = 100
 
     # Compute # train and warmup steps from batch size
@@ -237,12 +237,6 @@ for train_index, test_index in kf.split(X):
     print("{} train features, {} test features".format(len(train_features), len(test_features)))
     print("Running {} training steps!".format(num_train_steps))
     print("Running {} warmup steps!".format(num_warmup_steps))
-
-    # Specify output directory and number of checkpoint steps to save
-    #run_config = tf.contrib.tpu.RunConfig(
-    #    model_dir=model_path,
-    #    save_summary_steps=SAVE_SUMMARY_STEPS,
-    #    save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
 
     is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
     run_config = tf.contrib.tpu.RunConfig(
@@ -255,12 +249,7 @@ for train_index, test_index in kf.split(X):
           num_shards=FLAGS.num_shards,
           per_host_input_for_training=is_per_host))
 
-    #run_config = tf.estimator.RunConfig(
-        #model_dir=model_path,
-        #save_summary_steps=SAVE_SUMMARY_STEPS,
-        #save_checkpoints_steps=SAVE_CHECKPOINTS_STEPS)
-
-    model_fn = basic_model.model_fn_builder(
+    model_fn = better_model.model_fn_builder(
       bert_config=bert_config,
       num_labels=len(label_list),
       init_checkpoint=init_checkpoint,
@@ -300,26 +289,14 @@ for train_index, test_index in kf.split(X):
         eval_steps = int(len(test_features) // BATCH_SIZE)
         print("Setting eval_steps to {}. Dropping remainder.".format(eval_steps))
 
-    print('Pre-training estimate...')
-    print(estimator.evaluate(input_fn=test_input_fn, steps=eval_steps))
-
     current_time = datetime.now()
+
     print('Beginning Training!')
-    for chunk in range(1, int(num_train_steps / 500)+1):
-        print("TRAINING CYCLE:")
-        print("**************************")
-        estimator.train(input_fn=train_input_fn, max_steps=chunk*500)
-
-        print("CURRENT EVALUATION:")
-        print("**************************")
-        print(estimator.evaluate(input_fn=test_input_fn, steps=eval_steps))
-
-    #estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
-    #print(estimator.evaluate(input_fn=test_input_fn, steps=eval_steps))
+    
+    estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
     print("Training took time ", datetime.now() - current_time)
 
     """Evaluate model"""
     results = estimator.evaluate(input_fn=test_input_fn, steps=eval_steps)
     
     print(results)
-    break
