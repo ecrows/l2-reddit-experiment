@@ -115,8 +115,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
       def metric_fn(per_example_loss, label_ids, logits, is_real_example):
         predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
 
-        accuracy_real = tf.metrics.accuracy(label_ids, predictions, is_real_example)
-        accuracy_fake = tf.metrics.accuracy(label_ids, predictions)
+        accuracy_eval = tf.metrics.accuracy(label_ids, predictions, is_real_example)
         f1_score = tf.contrib.metrics.f1_score(
             label_ids,
             predictions)
@@ -143,8 +142,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             predictions)
         loss = tf.metrics.mean(values=per_example_loss)
         return {
-            "fake_accuracy": accuracy_fake,
-            "real_accuracy": accuracy_real,
+            "eval_accuracy": accuracy,
             "eval_loss": loss,
             "f1_score": f1_score,
             "auc": auc,
