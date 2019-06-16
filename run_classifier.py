@@ -21,10 +21,13 @@ from __future__ import print_function
 import collections
 import csv
 import os
+
 from bert import modeling
 from bert import optimization
 from bert import tokenization
 import tensorflow as tf
+import pandas as pd
+from sklearn.model_selection import KFold
 
 flags = tf.flags
 
@@ -49,6 +52,18 @@ flags.DEFINE_string("vocab_file", None,
 flags.DEFINE_string(
     "output_dir", None,
     "The output directory where the model checkpoints will be written.")
+
+flags.DEFINE_integer(
+    "folds", None,
+    "Number of folds to run for cross-validation")
+
+flags.DEFINE_integer(
+    "fold_index", None,
+    "Index of which fold split to use")
+
+flags.DEFINE_integer(
+    "seed", None,
+    "Random seed to use for sampling")
 
 ## Other parameters
 
@@ -203,175 +218,75 @@ class DataProcessor(object):
         lines.append(line)
       return lines
 
+class RRGTProcessor(DataProcessor):
+  """Custom processor for the L2Reddit data set"""
 
-class XnliProcessor(DataProcessor):
-  """Processor for the XNLI data set."""
+  def __init__(self, data_dir):
+    """We use the initialization to split our data into train and test sets
+    Seeds are used to ensure that the experiments are repeatable/resumable
+    """
+    gtdf = self._load_stripped_lines("{}/ground_truth_lines.txt".format(data_dir))
+    rrdf = self._load_stripped_lines("{}/reddit_random_lines.txt".format(data_dir))
 
-  def __init__(self):
-    self.language = "zh"
+    shorter_length = min(len(gtdf), len(rrdf))
 
-  def get_train_examples(self, data_dir):
-    """See base class."""
-    lines = self._read_tsv(
-        os.path.join(data_dir, "multinli",
-                     "multinli.train.%s.tsv" % self.language))
-    examples = []
-    for (i, line) in enumerate(lines):
-      if i == 0:
+    rr_balanced = self._clip_and_label(rrdf, shorter_length, "0")
+    gt_balanced = self._clip_and_label(gtdf, shorter_length, "1")
+
+    kf = KFold(n_splits=FLAGS.folds, shuffle=True, random_state=FLAGS.seed)
+
+    data = rr_balanced.append(gt_balanced)
+
+    fold = 0
+
+    for train_index, test_index in kf.split(data):
+      if fold != FLAGS.fold_index:
+        fold += 1
         continue
-      guid = "train-%d" % (i)
-      text_a = tokenization.convert_to_unicode(line[0])
-      text_b = tokenization.convert_to_unicode(line[1])
-      label = tokenization.convert_to_unicode(line[2])
-      if label == tokenization.convert_to_unicode("contradictory"):
-        label = tokenization.convert_to_unicode("contradiction")
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-    return examples
 
-  def get_dev_examples(self, data_dir):
-    """See base class."""
-    lines = self._read_tsv(os.path.join(data_dir, "xnli.dev.tsv"))
-    examples = []
-    for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
-      guid = "dev-%d" % (i)
-      language = tokenization.convert_to_unicode(line[0])
-      if language != tokenization.convert_to_unicode(self.language):
-        continue
-      text_a = tokenization.convert_to_unicode(line[6])
-      text_b = tokenization.convert_to_unicode(line[7])
-      label = tokenization.convert_to_unicode(line[1])
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-    return examples
+      self.train, self.test = data.iloc[train_index], data.iloc[test_index]
 
-  def get_labels(self):
-    """See base class."""
-    return ["contradiction", "entailment", "neutral"]
+      break
 
+  def _clip_and_label(self, data, length, label):
+    balanced = data.sample(n=length, random_state=FLAGS.seed).copy()
+     
+    if len(balanced.columns) == 1:
+      balanced.columns = ['sentence']
+    elif len(balanced.columns) == 2:
+      balanced.columns = ['sentence', 'label']
+     
+    balanced['label'] = label
+    return balanced
 
-class MnliProcessor(DataProcessor):
-  """Processor for the MultiNLI data set (GLUE version)."""
+  def _load_stripped_lines(self, filename):
+    with tf.gfile.Open(filename, "r") as f:
+      return pd.DataFrame([s.strip() for s in f.readlines()])
 
-  def get_train_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-  def get_dev_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev_matched.tsv")),
-        "dev_matched")
-
-  def get_test_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test_matched.tsv")), "test")
-
-  def get_labels(self):
-    """See base class."""
-    return ["contradiction", "entailment", "neutral"]
-
-  def _create_examples(self, lines, set_type):
+  def _create_examples(self, df, set_type):
     """Creates examples for the training and dev sets."""
-    examples = []
-    for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
-      guid = "%s-%s" % (set_type, tokenization.convert_to_unicode(line[0]))
-      text_a = tokenization.convert_to_unicode(line[8])
-      text_b = tokenization.convert_to_unicode(line[9])
-      if set_type == "test":
-        label = "contradiction"
-      else:
-        label = tokenization.convert_to_unicode(line[-1])
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-    return examples
+    return df.apply(lambda x: InputExample(guid="{}-{}".format(set_type, x.index),
+                                                               text_a = x['sentence'],
+                                                               text_b = None,
+                                                               label = x['label']), axis = 1)
 
-
-class MrpcProcessor(DataProcessor):
-  """Processor for the MRPC data set (GLUE version)."""
-
-  def get_train_examples(self, data_dir):
+  def get_train_examples(self, data_dir=None):
     """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+    return self._create_examples(self.train, "train")
 
+  # We won't be tuning hyperparameters, so we will limit our datasets to "train" and "test"
   def get_dev_examples(self, data_dir):
     """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+    raise NotImplementedError()
 
-  def get_test_examples(self, data_dir):
+  def get_test_examples(self, data_dir=None):
     """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+    return self._create_examples(self.test, "test")
 
   def get_labels(self):
     """See base class."""
     return ["0", "1"]
 
-  def _create_examples(self, lines, set_type):
-    """Creates examples for the training and dev sets."""
-    examples = []
-    for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
-      guid = "%s-%s" % (set_type, i)
-      text_a = tokenization.convert_to_unicode(line[3])
-      text_b = tokenization.convert_to_unicode(line[4])
-      if set_type == "test":
-        label = "0"
-      else:
-        label = tokenization.convert_to_unicode(line[0])
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-    return examples
-
-
-class ColaProcessor(DataProcessor):
-  """Processor for the CoLA data set (GLUE version)."""
-
-  def get_train_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-  def get_dev_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
-
-  def get_test_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
-
-  def get_labels(self):
-    """See base class."""
-    return ["0", "1"]
-
-  def _create_examples(self, lines, set_type):
-    """Creates examples for the training and dev sets."""
-    examples = []
-    for (i, line) in enumerate(lines):
-      # Only the test set has a header
-      if set_type == "test" and i == 0:
-        continue
-      guid = "%s-%s" % (set_type, i)
-      if set_type == "test":
-        text_a = tokenization.convert_to_unicode(line[1])
-        label = "0"
-      else:
-        text_a = tokenization.convert_to_unicode(line[3])
-        label = tokenization.convert_to_unicode(line[1])
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
-    return examples
 
 
 def convert_single_example(ex_index, example, label_list, max_seq_length,
@@ -817,10 +732,7 @@ def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
   processors = {
-      "cola": ColaProcessor,
-      "mnli": MnliProcessor,
-      "mrpc": MrpcProcessor,
-      "xnli": XnliProcessor,
+      "rrgt": RRGTProcessor
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
@@ -845,7 +757,7 @@ def main(_):
   if task_name not in processors:
     raise ValueError("Task not found: %s" % (task_name))
 
-  processor = processors[task_name]()
+  processor = processors[task_name](FLAGS.data_dir)
 
   label_list = processor.get_labels()
 
@@ -1011,4 +923,7 @@ if __name__ == "__main__":
   flags.mark_flag_as_required("vocab_file")
   flags.mark_flag_as_required("bert_config_file")
   flags.mark_flag_as_required("output_dir")
+  flags.mark_flag_as_required("folds")
+  flags.mark_flag_as_required("fold_index")
+  flags.mark_flag_as_required("seed")
   tf.app.run()
