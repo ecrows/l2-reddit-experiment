@@ -1,8 +1,21 @@
-export TPU_NAME=worker1
+# Start a TPU
+TPU_NAME=$1
+if [ -z "$TPU_NAME" ]
+then
+        echo 'Must specify a name for the TPU'
+        exit 1
+fi
+
+SEED=$2
+if [ -z "$SEED" ]
+then
+        echo 'Must specify a seed'
+        exit 1
+fi
+
 export BERT_DIR=gs://redbert/bert-large-wwm
 export DATA_DIR=gs://redbert/reddit-data
 
-SEED=44
 FOLDS=10
 MAX_SEQ=$((FOLDS-1))
 
