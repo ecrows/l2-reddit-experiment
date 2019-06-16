@@ -159,6 +159,10 @@ class InputExample(object):
     self.text_b = text_b
     self.label = label
 
+  def __str__(self):
+      return ("InputExample: GUID {}, Text_A: {}, Text_B: {}, Label: {}"
+              .format(self.guid, self.text_a, self.text_b, self.label))
+
 
 class PaddingInputExample(object):
   """Fake example so the num input examples is a multiple of the batch size.
@@ -235,7 +239,7 @@ class RRGTProcessor(DataProcessor):
 
     kf = KFold(n_splits=FLAGS.folds, shuffle=True, random_state=FLAGS.seed)
 
-    data = rr_balanced.append(gt_balanced)
+    data = rr_balanced.append(gt_balanced).sample(frac=1, random_state=FLAGS.seed)
 
     fold = 0
 
@@ -247,6 +251,7 @@ class RRGTProcessor(DataProcessor):
       self.train, self.test = data.iloc[train_index], data.iloc[test_index]
 
       break
+    
 
   def _clip_and_label(self, data, length, label):
     balanced = data.sample(n=length, random_state=FLAGS.seed).copy()
@@ -265,23 +270,23 @@ class RRGTProcessor(DataProcessor):
 
   def _create_examples(self, df, set_type):
     """Creates examples for the training and dev sets."""
-    return df.apply(lambda x: InputExample(guid="{}-{}".format(set_type, x.index),
-                                                               text_a = x['sentence'],
-                                                               text_b = None,
-                                                               label = x['label']), axis = 1)
+    return df.apply(lambda x: InputExample(guid="{}-{}".format(set_type, x.name),
+                                           text_a = x['sentence'],
+                                           text_b = None,
+                                           label = x['label']), axis = 1).tolist()
 
   def get_train_examples(self, data_dir=None):
     """See base class."""
     return self._create_examples(self.train, "train")
 
-  # We won't be tuning hyperparameters, so we will limit our datasets to "train" and "test"
-  def get_dev_examples(self, data_dir):
+  def get_dev_examples(self, data_dir=None):
     """See base class."""
-    raise NotImplementedError()
+    return self._create_examples(self.test, "dev")
 
+  # We won't be tuning hyperparameters, so we will limit our datasets to "train" and "eval"
   def get_test_examples(self, data_dir=None):
     """See base class."""
-    return self._create_examples(self.test, "test")
+    raise NotImplementedError()
 
   def get_labels(self):
     """See base class."""
@@ -508,7 +513,7 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
 
   output_weights = tf.get_variable(
       "output_weights", [num_labels, hidden_size],
-      initializer=tf.truncated_normal_initializer(stddev=0.02))
+      initializer=tf.truncated_normal_initializer(stddev=0.02, seed=FLAGS.seed))
 
   output_bias = tf.get_variable(
       "output_bias", [num_labels], initializer=tf.zeros_initializer())
