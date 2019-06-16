@@ -4,9 +4,10 @@ export DATA_DIR=gs://redbert/reddit-data
 
 SEED=44
 FOLDS=10
+MAX_SEQ=$((FOLDS-1))
 
-for FOLD_INDEX in $(seq 1 $FOLDS); do
-  MODEL_DIR=gs://redbert/validation-models-large/seed$SEED-fold$((FOLD_INDEX))of$FOLDS
+for FOLD_INDEX in $(seq 0 $MAX_SEQ); do
+  MODEL_DIR=gs://redbert/validation-models-large/seed$SEED-fold$((FOLD_INDEX+1))of$FOLDS
   python3 run_classifier.py \
     --task_name=RRGT \
     --do_train=true \
