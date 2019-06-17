@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Start a TPU
 TPU_NAME=$1
 if [ -z "$TPU_NAME" ]
@@ -20,6 +22,17 @@ then
         exit 1
 fi
 
+TASKTYPE='none'
+if [ $TASK = RRGT ]
+then
+  TASKTYPE='unmasked'
+fi
+
+if [ $TASK = RRGTmask ]
+then
+  TASKTYPE='masked'
+fi
+
 
 export BERT_DIR=gs://redbert/bert-large-wwm
 export DATA_DIR=gs://redbert/reddit-data
@@ -28,7 +41,7 @@ FOLDS=10
 MAX_SEQ=$((FOLDS-1))
 
 for FOLD_INDEX in $(seq 0 $MAX_SEQ); do
-  MODEL_DIR=gs://redbert/validation-models-large-masked/seed$SEED-fold$((FOLD_INDEX+1))of$FOLDS
+  MODEL_DIR=gs://redbert/final-models/${TASKTYPE}/seed$SEED-fold$((FOLD_INDEX+1))of$FOLDS
   python3 run_classifier.py \
     --task_name=$TASK \
     --do_train=true \
