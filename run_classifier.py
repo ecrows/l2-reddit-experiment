@@ -293,6 +293,77 @@ class RRGTProcessor(DataProcessor):
     return ["0", "1"]
 
 
+class RRGTMaskProcessor(DataProcessor):
+  """Custom processor for the L2Reddit data set"""
+
+  def __init__(self, data_dir):
+    """We use the initialization to split our data into train and test sets
+    Seeds are used to ensure that the experiments are repeatable/resumable
+    """
+    gtdf = self._load_stripped_lines("{}/ground_truth_masked.txt".format(data_dir))
+    rrdf = self._load_stripped_lines("{}/reddit_random_masked.txt".format(data_dir))
+
+    shorter_length = min(len(gtdf), len(rrdf))
+
+    rr_balanced = self._clip_and_label(rrdf, shorter_length, "0")
+    gt_balanced = self._clip_and_label(gtdf, shorter_length, "1")
+
+    kf = KFold(n_splits=FLAGS.folds, shuffle=True, random_state=FLAGS.seed)
+
+    data = rr_balanced.append(gt_balanced).sample(frac=1, random_state=FLAGS.seed)
+
+    fold = 0
+
+    for train_index, test_index in kf.split(data):
+      if fold != FLAGS.fold_index:
+        fold += 1
+        continue
+
+      self.train, self.test = data.iloc[train_index], data.iloc[test_index]
+
+      break
+    
+
+  def _clip_and_label(self, data, length, label):
+    balanced = data.sample(n=length, random_state=FLAGS.seed).copy()
+     
+    if len(balanced.columns) == 1:
+      balanced.columns = ['sentence']
+    elif len(balanced.columns) == 2:
+      balanced.columns = ['sentence', 'label']
+     
+    balanced['label'] = label
+    return balanced
+
+  def _load_stripped_lines(self, filename):
+    with tf.gfile.Open(filename, "r") as f:
+      return pd.DataFrame([s.strip() for s in f.readlines()])
+
+  def _create_examples(self, df, set_type):
+    """Creates examples for the training and dev sets."""
+    return df.apply(lambda x: InputExample(guid="{}-{}".format(set_type, x.name),
+                                           text_a = x['sentence'],
+                                           text_b = None,
+                                           label = x['label']), axis = 1).tolist()
+
+  def get_train_examples(self, data_dir=None):
+    """See base class."""
+    return self._create_examples(self.train, "train")
+
+  def get_dev_examples(self, data_dir=None):
+    """See base class."""
+    return self._create_examples(self.test, "dev")
+
+  # We won't be tuning hyperparameters, so we will limit our datasets to "train" and "eval"
+  def get_test_examples(self, data_dir=None):
+    """See base class."""
+    raise NotImplementedError()
+
+  def get_labels(self):
+    """See base class."""
+    return ["0", "1"]
+
+
 
 def convert_single_example(ex_index, example, label_list, max_seq_length,
                            tokenizer):
@@ -737,7 +808,8 @@ def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
   processors = {
-      "rrgt": RRGTProcessor
+      "rrgt": RRGTProcessor,
+      "rrgtmask": RRGTMaskProcessor
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
