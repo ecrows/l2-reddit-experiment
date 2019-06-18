@@ -222,6 +222,73 @@ class DataProcessor(object):
         lines.append(line)
       return lines
 
+class L1EnFNEProcessor(DataProcessor):
+  """Custom processor for the L1EnFNE data set"""
+
+  def get_dev_examples(self, data_dir=None):
+    """See base class."""
+    return self._create_examples(self.test, "dev")
+
+  def get_labels(self):
+    """See base class."""
+    return ["0", "1"]
+
+# The dataset for L1 English is very large, so these samples were generated beforehand
+# The samples are indexed by seed
+class L1EnProcessor(DataProcessor):
+  """Custom processor for the L1En data set"""
+
+  def get_dev_examples(self, data_dir=None):
+    """See base class."""
+    return self._create_examples(self.test, "dev")
+
+  def get_labels(self):
+    """See base class."""
+    return ["0", "1"]
+
+class L1EnMaskProcessor(DataProcessor):
+  """Custom processor for the L1EnMask data set"""
+
+  def get_dev_examples(self, data_dir=None):
+    """See base class."""
+    return self._create_examples(self.test, "dev")
+
+  def get_labels(self):
+    """See base class."""
+    return ["0", "1"]
+
+class L1EnFNEProcessor(DataProcessor):
+  """Custom processor for the L1EnFNE data set"""
+
+  def get_dev_examples(self, data_dir=None):
+    """See base class."""
+    return self._create_examples(self.test, "dev")
+
+  def get_labels(self):
+    """See base class."""
+    return ["0", "1"]
+
+class L1EnFNEMaskProcessor(DataProcessor):
+  """Custom processor for the L1EnFNEMask data set"""
+
+  def _create_examples(self, df, set_type):
+    """Creates examples for the training and dev sets."""
+    with tf.gfile.Open(filename, "r") as f:
+      return pd.DataFrame([s.strip() for s in f.readlines()])
+    return df.apply(lambda x: InputExample(guid="{}-{}".format(set_type, x.name),
+                                           text_a = x['sentence'],
+                                           text_b = None,
+                                           label = x['label']), axis = 1).tolist()
+
+  def get_dev_examples(self, data_dir=None):
+    """See base class."""
+    return self._create_examples(self.test, "dev")
+
+  def get_labels(self):
+    """See base class."""
+    return ["0", "1"]
+
+
 class RRGTProcessor(DataProcessor):
   """Custom processor for the L2Reddit data set"""
 
