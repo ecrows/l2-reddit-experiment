@@ -54,7 +54,7 @@ for FOLD_INDEX in $(seq 0 $MAX_SEQ); do
     --max_seq_length=128 \
     --train_batch_size=64 \
     --learning_rate=2e-5 \
-    --num_train_epochs=3.0 \
+    --num_train_epochs=5.0 \
     --folds=$FOLDS \
     --fold_index=$FOLD_INDEX \
     --seed=$SEED \

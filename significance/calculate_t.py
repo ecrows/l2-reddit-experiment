@@ -20,7 +20,7 @@ denominator = math.sqrt(((1/kr) + test_train_ratio) * x.var())
 
 t = numerator / denominator
 
-print("The t-statistic is {} (masked=positive, unmasked=negative).".format(t))
+print("The t-statistic is {} (unmasked=positive, masked=negative).".format(t))
 
 rfiles = glob("./results/*.json")
 
