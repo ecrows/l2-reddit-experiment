@@ -222,67 +222,117 @@ class DataProcessor(object):
         lines.append(line)
       return lines
 
-class L1EnFNEProcessor(DataProcessor):
-  """Custom processor for the L1EnFNE data set"""
-
-  def get_dev_examples(self, data_dir=None):
-    """See base class."""
-    return self._create_examples(self.test, "dev")
-
-  def get_labels(self):
-    """See base class."""
-    return ["0", "1"]
-
 # The dataset for L1 English is very large, so these samples were generated beforehand
 # The samples are indexed by seed
 class L1EnProcessor(DataProcessor):
-  """Custom processor for the L1En data set"""
+  """Predict-only Custom processor for the L1En data set"""
+  def __init__(self, data_dir):
+      self.datadir = data_dir
 
-  def get_dev_examples(self, data_dir=None):
+  def get_test_examples(self, data_dir=None):
     """See base class."""
-    return self._create_examples(self.test, "dev")
+    subfolder = "regular"
+    filename_base = "l1samplelines_"
+    filename_suffix = ""
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
+    filename = "{}/l1multisamples/{}/{}{}{}".format(
+            self.datadir, subfolder, filename_base, l1seed, filename_suffix)
+
+    with tf.gfile.Open(filename, "r") as f:
+      df = pd.DataFrame([s.strip() for s in f.readlines()])
+      df.columns = ["sentence"]
+      df["label"] = "0"
+
+    return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
+                                           text_a = x['sentence'],
+                                           text_b = None,
+                                           label = x['label']), axis = 1).tolist()
 
   def get_labels(self):
     """See base class."""
     return ["0", "1"]
+
 
 class L1EnMaskProcessor(DataProcessor):
-  """Custom processor for the L1EnMask data set"""
+  """Predict-only Custom processor for the L1EnMask data set"""
+  def __init__(self, data_dir):
+      self.datadir = data_dir
 
-  def get_dev_examples(self, data_dir=None):
+  def get_test_examples(self, data_dir=None):
     """See base class."""
-    return self._create_examples(self.test, "dev")
+    subfolder = "regular-masked"
+    filename_base = "l1samplelines_"
+    filename_suffix = "masked"
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
+    filename = "{}/l1multisamples/{}/{}{}{}".format(
+            self.datadir, subfolder, filename_base, l1seed, filename_suffix)
+
+    with tf.gfile.Open(filename, "r") as f:
+      df = pd.DataFrame([s.strip() for s in f.readlines()])
+      df.columns = ["sentence"]
+      df["label"] = "0"
+
+    return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
+                                           text_a = x['sentence'],
+                                           text_b = None,
+                                           label = x['label']), axis = 1).tolist()
 
   def get_labels(self):
     """See base class."""
     return ["0", "1"]
 
-class L1EnFNEProcessor(DataProcessor):
-  """Custom processor for the L1EnFNE data set"""
 
-  def get_dev_examples(self, data_dir=None):
+class L1EnFNEProcessor(DataProcessor):
+  """Predict-only Custom processor for the L1EnFNE data set"""
+  def __init__(self, data_dir):
+      self.datadir = data_dir
+
+  def get_test_examples(self, data_dir=None):
     """See base class."""
-    return self._create_examples(self.test, "dev")
+    subfolder = "fne"
+    filename_base = "l1samplelines_fne_"
+    filename_suffix = ""
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
+    filename = "{}/l1multisamples/{}/{}{}{}".format(
+            self.datadir, subfolder, filename_base, l1seed, filename_suffix)
+
+    with tf.gfile.Open(filename, "r") as f:
+      df = pd.DataFrame([s.strip() for s in f.readlines()])
+      df.columns = ["sentence"]
+      df["label"] = "0"
+
+    return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
+                                           text_a = x['sentence'],
+                                           text_b = None,
+                                           label = x['label']), axis = 1).tolist()
 
   def get_labels(self):
     """See base class."""
     return ["0", "1"]
 
 class L1EnFNEMaskProcessor(DataProcessor):
-  """Custom processor for the L1EnFNEMask data set"""
+  """Predict-only custom processor for the L1EnFNEMask data set"""
+  def __init__(self, data_dir):
+      self.datadir = data_dir
 
-  def _create_examples(self, df, set_type):
-    """Creates examples for the training and dev sets."""
+  def get_test_examples(self, data_dir=None):
+    """See base class."""
+    subfolder = "fne-masked"
+    filename_base = "l1samplelines_fne_"
+    filename_suffix = "_masked"
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
+    filename = "{}/l1multisamples/{}/{}{}{}".format(
+            self.datadir, subfolder, filename_base, l1seed, filename_suffix)
+
     with tf.gfile.Open(filename, "r") as f:
-      return pd.DataFrame([s.strip() for s in f.readlines()])
-    return df.apply(lambda x: InputExample(guid="{}-{}".format(set_type, x.name),
+      df = pd.DataFrame([s.strip() for s in f.readlines()])
+      df.columns = ["sentence"]
+      df["label"] = "0"
+
+    return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
                                            text_b = None,
                                            label = x['label']), axis = 1).tolist()
-
-  def get_dev_examples(self, data_dir=None):
-    """See base class."""
-    return self._create_examples(self.test, "dev")
 
   def get_labels(self):
     """See base class."""
@@ -876,7 +926,11 @@ def main(_):
 
   processors = {
       "rrgt": RRGTProcessor,
-      "rrgtmask": RRGTMaskProcessor
+      "rrgtmask": RRGTMaskProcessor,
+      "l1en": L1EnProcessor,
+      "l1enmask": L1EnMaskProcessor,
+      "l1enfne": L1EnFNEProcessor,
+      "l1enfnemask": L1EnFNEMaskProcessor
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
