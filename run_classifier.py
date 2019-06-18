@@ -262,7 +262,7 @@ class L1EnMaskProcessor(DataProcessor):
     """See base class."""
     subfolder = "regular-masked"
     filename_base = "l1samplelines_"
-    filename_suffix = "masked"
+    filename_suffix = "_masked"
     l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l1multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
