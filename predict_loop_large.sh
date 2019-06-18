@@ -23,14 +23,20 @@ then
 fi
 
 TASKTYPE='none'
-if [ $TASK = l1enmask ] || [ $TASK = l1enfnemask ]
+if [ $TASK = l1enmask ] || [ $TASK = l1enfnemask ] || [ $TASK = l2enfnemask ] || [ $TASK = l2enmask ]
 then
   TASKTYPE='masked'
 fi
 
-if [ $TASK = l1en ] || [ $TASK = l1enfne ]
+if [ $TASK = l1en ] || [ $TASK = l1enfne ] || [ $TASK = l2en ] || [ $TASK = l2enfne ]
 then
   TASKTYPE='unmasked'
+fi
+
+if $TASKTYPE = none
+then
+	echo 'Invalid task type!'
+	exit 1
 fi
 
 
