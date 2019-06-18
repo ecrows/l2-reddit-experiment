@@ -3,6 +3,7 @@ from collections import defaultdict
 from pprint import pprint
 import json
 import os
+import errno
 
 bucket = "gs://redbert/final-models"
 modes = ['masked', 'unmasked']
