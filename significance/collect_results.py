@@ -2,41 +2,51 @@ import tensorflow as tf
 from collections import defaultdict
 from pprint import pprint
 import json
+import os
 
 bucket = "gs://redbert/final-models"
 modes = ['masked', 'unmasked']
 max_fold = 10
 seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-acc = {}
-
-#step_to_check = 910
 step_to_check = 1517
 
+to_retrieve = ['eval_accuracy', 'auc', 'f1_score', 'precision', 'recall']
+stats = {}
+
+for r in to_retrieve:
+    stats[r] = {}
+    for mode in modes:
+        stats[r][mode] = {}
+
+
+def get_field_from_files(files, field):
+    for f in files:
+        for e in tf.train.summary_iterator(f):
+            if (e.step == step_to_check):
+                for v in e.summary.value:
+                    if v.tag == field:
+                        return v.simple_value
+    return None
+
+
 for mode in modes:
-    acc[mode] = {}
-    step_counts = defaultdict(int)
-
     for seed in seeds:
-
         for fold in range(1, max_fold+1):
             key = "seed{}-fold{}of{}".format(seed, fold, max_fold)
-            acc[mode][key] = []
-
             path = "{}/{}/seed{}-fold{}of{}/eval/*".format(bucket, mode, seed, fold, max_fold)
             files = tf.gfile.Glob(path)
 
-            for f in files:
-                for e in tf.train.summary_iterator(f):
-                    if (e.step == step_to_check):
-                        for v in e.summary.value:
-                            if v.tag == 'eval_accuracy':
-                                acc[mode][key].append(v.simple_value)
+            for r in to_retrieve:
+                stats[r][mode][key] = get_field_from_files(files, r)
 
-                                #accuracies.get(mode, []).append(v.simple_value)
-                                #print(accuracies)
+try:
+    os.makedirs('results')
+except OSError as e:
+    if e.errno != errno.EEXIST:
+        raise
 
-pprint(acc)
 
-with open("./results_second.json", "w") as f:
-    json.dump(acc, f)
+for r in to_retrieve:
+    with open("./results/{}_results.json".format(r), "w") as f:
+        json.dump(stats[r], f)
