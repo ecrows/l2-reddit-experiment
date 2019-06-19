@@ -1,4 +1,6 @@
 from glob import glob
+from scipy import stats
+import numpy as np
 import pandas as pd
 import json
 import math
@@ -7,6 +9,8 @@ a = pd.read_json("./results/classifier/eval_accuracy_results.json")
 
 masked_seeds = a['masked']
 unmasked_seeds = a['unmasked']
+
+print("Collected {} masked samples and {} unmasked samples.".format(masked_seeds.shape[0], unmasked_seeds.shape[0]))
 
 x = unmasked_seeds - masked_seeds
 
@@ -19,8 +23,10 @@ numerator = (1/kr) * x.sum()
 denominator = math.sqrt(((1/kr) + test_train_ratio) * x.var())
 
 t = numerator / denominator
+pval = stats.t.sf(np.abs(t), kr-1)*2 # two-sided p-value
 
 print("The t-statistic is {} (unmasked=positive, masked=negative).".format(t))
+print("Two-sided p-value of {}".format(pval))
 
 rfiles = glob("./results/classifier/*.json")
 
