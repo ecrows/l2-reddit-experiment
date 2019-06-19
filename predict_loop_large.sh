@@ -33,7 +33,7 @@ then
   TASKTYPE='unmasked'
 fi
 
-if $TASKTYPE = none
+if [ $TASKTYPE = none ]
 then
 	echo 'Invalid task type!'
 	exit 1
