@@ -10,12 +10,16 @@ if len(sys.argv) < 2:
     print("Require bucket folder (e.g. base-models, final-models)")
     exit()
 
+if len(sys.argv) < 3:
+    print("Require step to get (e.g. 1517, 910)")
+    exit()
+
 bucket = "gs://redbert/{}".format(sys.argv[1])
 modes = ['masked', 'unmasked']
 max_fold = 10
 seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-step_to_check = 1517
+step_to_check = int(sys.argv[2])
 
 to_retrieve = ['eval_accuracy', 'auc', 'f1_score', 'precision', 'recall']
 stats = {}
