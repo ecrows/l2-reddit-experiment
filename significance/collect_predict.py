@@ -18,11 +18,11 @@ seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 bucket = "gs://redbert/{}".format(sys.argv[1])
 
 def main():
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 3:
         print("Must specify task (e.g. l1en, l1enmask, l1enfne, l1enfnemask) or specify ALL")
         exit()
 
-    task = sys.argv[1]
+    task = sys.argv[2]
 
     tasks = ['l1en', 'l2en', 'l1enmask', 'l2enmask', 'l1enfne', 'l2enfne', 'l1enfnemask', 'l2enfnemask']
 
@@ -36,6 +36,7 @@ def main():
 
 def harvest_fpr(task):
     fpr = []
+    fcount = 0
 
     if task in ["l1en", "l1enfne", "l2en", "l2enfne"]:
         mode = "unmasked"
@@ -58,10 +59,13 @@ def harvest_fpr(task):
                 error_count = len(misclass[misclass == True].index)
 
                 fpr.append(error_count/total_len)
+                fcount += 1
             except FileNotFoundError as e:
                 print("No file at path {}. Continuing...".format(path))
 
+    print("Collected {} files for {}".format(fcount, task))
     print("Mean false-positive rate for {}: {}".format(task, mean(fpr)))
+    print("***")
 
     try:
         os.makedirs('results')

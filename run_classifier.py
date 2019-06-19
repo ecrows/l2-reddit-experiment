@@ -236,7 +236,7 @@ class L2EnProcessor(DataProcessor):
     subfolder = "regular"
     filename_base = "l2samplelines_"
     filename_suffix = ""
-    l1seed = FLAGS.seed + 110 # Grab corresponding repeatable sample
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l2multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
 
@@ -245,7 +245,7 @@ class L2EnProcessor(DataProcessor):
       df.columns = ["sentence"]
       df["label"] = "0"
       if FLAGS.quick_predict:
-        df = df.sample(n=1000, random_state=FLAGS.seed)
+        df = df.sample(n=4000)#, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -267,7 +267,7 @@ class L2EnMaskProcessor(DataProcessor):
     subfolder = "regular-masked"
     filename_base = "l2samplelines_"
     filename_suffix = "_masked"
-    l1seed = FLAGS.seed + 110 # Grab corresponding repeatable sample
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l2multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
 
@@ -276,7 +276,7 @@ class L2EnMaskProcessor(DataProcessor):
       df.columns = ["sentence"]
       df["label"] = "0"
       if FLAGS.quick_predict:
-        df = df.sample(n=1000, random_state=FLAGS.seed)
+        df = df.sample(n=4000)#, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -298,7 +298,7 @@ class L2EnFNEProcessor(DataProcessor):
     subfolder = "fne"
     filename_base = "l2samplelines_fne_"
     filename_suffix = ""
-    l1seed = FLAGS.seed + 110 # Grab corresponding repeatable sample
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l2multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
 
@@ -307,7 +307,7 @@ class L2EnFNEProcessor(DataProcessor):
       df.columns = ["sentence"]
       df["label"] = "0"
       if FLAGS.quick_predict:
-        df = df.sample(n=1000, random_state=FLAGS.seed)
+        df = df.sample(n=4000)#, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -328,7 +328,7 @@ class L2EnFNEMaskProcessor(DataProcessor):
     subfolder = "fne-masked"
     filename_base = "l2samplelines_fne_"
     filename_suffix = "_masked"
-    l1seed = FLAGS.seed + 110 # Grab corresponding repeatable sample
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l2multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
 
@@ -337,7 +337,7 @@ class L2EnFNEMaskProcessor(DataProcessor):
       df.columns = ["sentence"]
       df["label"] = "0"
       if FLAGS.quick_predict:
-        df = df.sample(n=1000, random_state=FLAGS.seed)
+        df = df.sample(n=4000)#, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -360,7 +360,7 @@ class L1EnProcessor(DataProcessor):
     subfolder = "regular"
     filename_base = "l1samplelines_"
     filename_suffix = ""
-    l1seed = FLAGS.seed + 110 # Grab corresponding repeatable sample
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l1multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
 
@@ -369,7 +369,7 @@ class L1EnProcessor(DataProcessor):
       df.columns = ["sentence"]
       df["label"] = "0"
       if FLAGS.quick_predict:
-        df = df.sample(n=1000, random_state=FLAGS.seed)
+        df = df.sample(n=4000)#, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -391,7 +391,7 @@ class L1EnMaskProcessor(DataProcessor):
     subfolder = "regular-masked"
     filename_base = "l1samplelines_"
     filename_suffix = "_masked"
-    l1seed = FLAGS.seed + 110 # Grab corresponding repeatable sample
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l1multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
 
@@ -400,7 +400,7 @@ class L1EnMaskProcessor(DataProcessor):
       df.columns = ["sentence"]
       df["label"] = "0"
       if FLAGS.quick_predict:
-        df = df.sample(n=1000, random_state=FLAGS.seed)
+        df = df.sample(n=4000)#, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -422,7 +422,7 @@ class L1EnFNEProcessor(DataProcessor):
     subfolder = "fne"
     filename_base = "l1samplelines_fne_"
     filename_suffix = ""
-    l1seed = FLAGS.seed + 110 # Grab corresponding repeatable sample
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l1multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
 
@@ -431,7 +431,7 @@ class L1EnFNEProcessor(DataProcessor):
       df.columns = ["sentence"]
       df["label"] = "0"
       if FLAGS.quick_predict:
-        df = df.sample(n=1000, random_state=FLAGS.seed)
+        df = df.sample(n=4000)#, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -452,7 +452,7 @@ class L1EnFNEMaskProcessor(DataProcessor):
     subfolder = "fne-masked"
     filename_base = "l1samplelines_fne_"
     filename_suffix = "_masked"
-    l1seed = FLAGS.seed + 110 # Grab corresponding repeatable sample
+    l1seed = FLAGS.seed + 100 # Grab corresponding repeatable sample
     filename = "{}/l1multisamples/{}/{}{}{}".format(
             self.datadir, subfolder, filename_base, l1seed, filename_suffix)
 
@@ -462,7 +462,7 @@ class L1EnFNEMaskProcessor(DataProcessor):
       df["label"] = "0"
 
       if FLAGS.quick_predict:
-        df = df.sample(n=1000, random_state=FLAGS.seed)
+        df = df.sample(n=4000)#, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
