@@ -4,8 +4,13 @@ from pprint import pprint
 import json
 import os
 import errno
+import sys
 
-bucket = "gs://redbert/final-models"
+if len(sys.argv) < 2:
+    print("Require bucket folder (e.g. base-models, final-models)")
+    exit()
+
+bucket = "gs://redbert/{}".format(sys.argv[1])
 modes = ['masked', 'unmasked']
 max_fold = 10
 seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

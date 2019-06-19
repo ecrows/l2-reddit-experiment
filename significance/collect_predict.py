@@ -7,10 +7,15 @@ import json
 import sys
 import os
 import errno
+import sys
+
+if len(sys.argv) < 2:
+    print("Require bucket folder (e.g. base-models, final-models)")
+    exit()
 
 max_fold = 10
 seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-bucket = "gs://redbert/final-models"
+bucket = "gs://redbert/{}".format(sys.argv[1])
 
 def main():
     if len(sys.argv) < 2:
