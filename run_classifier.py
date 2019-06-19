@@ -90,6 +90,8 @@ flags.DEFINE_bool(
     "do_predict", False,
     "Whether to run the model in inference mode on the test set.")
 
+flags.DEFINE_bool("quick_predict", False, "Whether to run a smaller set of samples for testing.")
+
 flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
 
 flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
@@ -242,6 +244,8 @@ class L2EnProcessor(DataProcessor):
       df = pd.DataFrame([s.strip() for s in f.readlines()])
       df.columns = ["sentence"]
       df["label"] = "0"
+      if FLAGS.quick_predict:
+        df = df.sample(n=1000, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -271,6 +275,8 @@ class L2EnMaskProcessor(DataProcessor):
       df = pd.DataFrame([s.strip() for s in f.readlines()])
       df.columns = ["sentence"]
       df["label"] = "0"
+      if FLAGS.quick_predict:
+        df = df.sample(n=1000, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -300,6 +306,8 @@ class L2EnFNEProcessor(DataProcessor):
       df = pd.DataFrame([s.strip() for s in f.readlines()])
       df.columns = ["sentence"]
       df["label"] = "0"
+      if FLAGS.quick_predict:
+        df = df.sample(n=1000, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -328,6 +336,8 @@ class L2EnFNEMaskProcessor(DataProcessor):
       df = pd.DataFrame([s.strip() for s in f.readlines()])
       df.columns = ["sentence"]
       df["label"] = "0"
+      if FLAGS.quick_predict:
+        df = df.sample(n=1000, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -358,6 +368,8 @@ class L1EnProcessor(DataProcessor):
       df = pd.DataFrame([s.strip() for s in f.readlines()])
       df.columns = ["sentence"]
       df["label"] = "0"
+      if FLAGS.quick_predict:
+        df = df.sample(n=1000, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -387,6 +399,8 @@ class L1EnMaskProcessor(DataProcessor):
       df = pd.DataFrame([s.strip() for s in f.readlines()])
       df.columns = ["sentence"]
       df["label"] = "0"
+      if FLAGS.quick_predict:
+        df = df.sample(n=1000, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -416,6 +430,8 @@ class L1EnFNEProcessor(DataProcessor):
       df = pd.DataFrame([s.strip() for s in f.readlines()])
       df.columns = ["sentence"]
       df["label"] = "0"
+      if FLAGS.quick_predict:
+        df = df.sample(n=1000, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
@@ -444,6 +460,9 @@ class L1EnFNEMaskProcessor(DataProcessor):
       df = pd.DataFrame([s.strip() for s in f.readlines()])
       df.columns = ["sentence"]
       df["label"] = "0"
+
+      if FLAGS.quick_predict:
+        df = df.sample(n=1000, random_state=FLAGS.seed)
 
     return df.apply(lambda x: InputExample(guid="{}-{}".format("test", x.name),
                                            text_a = x['sentence'],
