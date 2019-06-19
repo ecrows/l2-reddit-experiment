@@ -3,7 +3,7 @@ import pandas as pd
 import json
 import math
 
-a = pd.read_json("./results/eval_accuracy_results.json")
+a = pd.read_json("./results/classifier/eval_accuracy_results.json")
 
 masked_seeds = a['masked']
 unmasked_seeds = a['unmasked']
@@ -22,8 +22,7 @@ t = numerator / denominator
 
 print("The t-statistic is {} (unmasked=positive, masked=negative).".format(t))
 
-rfiles = glob("./results/*.json")
-
+rfiles = glob("./results/classifier/*.json")
 
 # Calculate means
 for f in rfiles:

@@ -47,7 +47,13 @@ except OSError as e:
     if e.errno != errno.EEXIST:
         raise
 
+try:
+    os.makedirs('results/classifier')
+except OSError as e:
+    if e.errno != errno.EEXIST:
+        raise
+
 
 for r in to_retrieve:
-    with open("./results/{}_results.json".format(r), "w") as f:
+    with open("./results/classifier/{}_results.json".format(r), "w") as f:
         json.dump(stats[r], f)
