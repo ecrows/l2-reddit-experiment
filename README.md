@@ -1,6 +1,6 @@
 # l2-reddit-experiment
 
-Code for the submitted paper *"Towards the Ethical Detection of Online Influence Campaigns"* by Crothers et al. (2019).
+Code for the submitted paper *"Towards Ethical Content-Based Detection of Online Influence Campaigns"* by Crothers et al. (2019).
 
 Based off of the [official BERT experiment code](https://github.com/google-research/bert).
 
